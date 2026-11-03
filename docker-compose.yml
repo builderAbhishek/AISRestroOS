@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: aisrestroos-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/backend:/app
+      # Persistent bind mount for SQLite database and uploads outside disposable container
+      - ./data/db:/app/data
+      - ./data/uploads:/app/data/uploads
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=sqlite:////app/data/aisrestroos.db
+      - SQLITE_BUSY_TIMEOUT_MS=5000
+      - SQLITE_WAL_MODE=true
+      - BACKEND_PORT=8000
+      - FRONTEND_PORT=5173
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    container_name: aisrestroos-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./apps/frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_BACKEND_CONTAINER_URL=http://backend:8000
+      - VITE_API_URL=http://localhost:8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5173"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

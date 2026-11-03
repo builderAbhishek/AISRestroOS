@@ -1,0 +1,17 @@
+{
+  "name": "aisrestroos-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AISRestroOS — Offline Restaurant POS Desktop Shell",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "electron .",
+    "build:electron": "tsc -p tsconfig.json",
+    "package": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^30.1.0",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.5"
+  }
+}
