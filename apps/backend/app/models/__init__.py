@@ -14,6 +14,18 @@ from app.models.order import Order, OrderItem, OrderItemAddon
 from app.models.kot import KOT, KOTItem
 from app.models.billing import Invoice, Payment, Refund
 from app.models.printing import PrintJob
+from app.models.inventory import (
+    InventoryCategory,
+    Supplier,
+    InventoryItem,
+    Purchase,
+    PurchaseItem,
+    SupplierPayment,
+    StockMovement,
+    Recipe,
+    RecipeIngredient,
+    WastageRecord,
+)
 
 __all__ = [
     "Base",
@@ -36,4 +48,14 @@ __all__ = [
     "Payment",
     "Refund",
     "PrintJob",
+    "InventoryCategory",
+    "Supplier",
+    "InventoryItem",
+    "Purchase",
+    "PurchaseItem",
+    "SupplierPayment",
+    "StockMovement",
+    "Recipe",
+    "RecipeIngredient",
+    "WastageRecord",
 ]

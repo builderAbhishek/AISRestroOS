@@ -17,6 +17,8 @@ import { OrdersView } from '@/modules/orders/OrdersView';
 import { MenuView } from '@/modules/menu/MenuView';
 import { TablesView } from '@/modules/tables/TablesView';
 import { SettingsView } from '@/modules/settings/SettingsView';
+import { InventoryView } from '@/modules/inventory/InventoryView';
+import { ReportsView } from '@/modules/reports/ReportsView';
 import { PlaceholderView } from '@/modules/placeholders/PlaceholderView';
 
 export const AppLayout: React.FC = () => {
@@ -53,9 +55,9 @@ export const AppLayout: React.FC = () => {
           {currentRoute === 'menu' && <MenuView />}
           {currentRoute === 'tables' && <TablesView />}
           {currentRoute === 'settings' && <SettingsView />}
-          {(currentRoute === 'customers' ||
-            currentRoute === 'inventory' ||
-            currentRoute === 'reports') && <PlaceholderView route={currentRoute} />}
+          {currentRoute === 'inventory' && <InventoryView />}
+          {currentRoute === 'reports' && <ReportsView />}
+          {currentRoute === 'customers' && <PlaceholderView route={currentRoute} />}
         </main>
       </div>
 

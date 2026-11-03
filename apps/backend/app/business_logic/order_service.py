@@ -71,6 +71,13 @@ def cancel_order_with_audit(
     if order.invoice and order.invoice.status == "unpaid":
         order.invoice.status = "cancelled"
 
+    # Reverse stock deduction if any sale consumption occurred
+    try:
+        from app.business_logic.inventory_service import reverse_stock_for_order
+        reverse_stock_for_order(db, order, reason=reason)
+    except Exception as e:
+        logger.error(f"Failed to reverse stock for cancelled order {order.id}: {e}")
+
     db.commit()
     db.refresh(order)
     logger.info(f"Order {order.order_code} cancelled. Reason: {reason}")

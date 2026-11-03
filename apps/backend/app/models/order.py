@@ -52,6 +52,14 @@ class Order(TimestampedUUIDModel):
     tax_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    @property
+    def grand_total_paise(self) -> int:
+        return self.total_paise
+
+    @grand_total_paise.setter
+    def grand_total_paise(self, val: int):
+        self.total_paise = val
+
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships

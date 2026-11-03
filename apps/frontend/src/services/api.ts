@@ -15,6 +15,23 @@ import {
   Refund,
   PrintJob,
   DashboardMetrics,
+  InventoryCategory,
+  Supplier,
+  InventoryItem,
+  Purchase,
+  Recipe,
+  WastageRecord,
+  StockMovement,
+  InventoryDashboardData,
+  ExecutiveOverview,
+  ReportSalesTrendPoint,
+  ItemWiseSale,
+  CategoryWiseSale,
+  OrderTypeSale,
+  PaymentMethodReport,
+  TaxReportData,
+  InventoryAnalyticsData,
+  ProfitabilityData,
 } from '@/types';
 
 const BASE_URL = '/api/v1';
@@ -272,4 +289,126 @@ export const printingApi = {
 export const dashboardApi = {
   getMetrics: (dateFilter: string = 'today') =>
     request<DashboardMetrics>(`/dashboard/metrics?date_filter=${dateFilter}`),
+};
+
+export const inventoryApi = {
+  getDashboard: () => request<InventoryDashboardData>('/inventory/dashboard'),
+  listItems: (params?: { search?: string; category_id?: string; supplier_id?: string; low_stock_only?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.append('search', params.search);
+    if (params?.category_id) q.append('category_id', params.category_id);
+    if (params?.supplier_id) q.append('supplier_id', params.supplier_id);
+    if (params?.low_stock_only) q.append('low_stock_only', 'true');
+    const qs = q.toString();
+    return request<InventoryItem[]>(`/inventory/items${qs ? `?${qs}` : ''}`);
+  },
+  getItem: (id: string) => request<InventoryItem>(`/inventory/items/${id}`),
+  createItem: (data: any) => request<InventoryItem>('/inventory/items', { method: 'POST', body: JSON.stringify(data) }),
+  updateItem: (id: string, data: any) => request<InventoryItem>(`/inventory/items/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteItem: (id: string) => request<{ message: string }>(`/inventory/items/${id}`, { method: 'DELETE' }),
+
+  listCategories: () => request<InventoryCategory[]>('/inventory/categories'),
+  createCategory: (data: any) => request<InventoryCategory>('/inventory/categories', { method: 'POST', body: JSON.stringify(data) }),
+  updateCategory: (id: string, data: any) => request<InventoryCategory>(`/inventory/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteCategory: (id: string) => request<{ message: string }>(`/inventory/categories/${id}`, { method: 'DELETE' }),
+
+  listSuppliers: () => request<Supplier[]>('/inventory/suppliers'),
+  createSupplier: (data: any) => request<Supplier>('/inventory/suppliers', { method: 'POST', body: JSON.stringify(data) }),
+  updateSupplier: (id: string, data: any) => request<Supplier>(`/inventory/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSupplier: (id: string) => request<{ message: string }>(`/inventory/suppliers/${id}`, { method: 'DELETE' }),
+
+  listPurchases: (statusFilter?: string, supplierId?: string) => {
+    const q = new URLSearchParams();
+    if (statusFilter && statusFilter !== 'all') q.append('status_filter', statusFilter);
+    if (supplierId) q.append('supplier_id', supplierId);
+    const qs = q.toString();
+    return request<Purchase[]>(`/inventory/purchases${qs ? `?${qs}` : ''}`);
+  },
+  getPurchase: (id: string) => request<Purchase>(`/inventory/purchases/${id}`),
+  createPurchase: (data: any) => request<Purchase>('/inventory/purchases', { method: 'POST', body: JSON.stringify(data) }),
+  receivePurchase: (id: string) => request<Purchase>(`/inventory/purchases/${id}/receive`, { method: 'POST' }),
+  cancelPurchase: (id: string, reason: string) =>
+    request<Purchase>(`/inventory/purchases/${id}/cancel?reason=${encodeURIComponent(reason)}`, { method: 'POST' }),
+  recordSupplierPayment: (purchaseId: string, data: any) =>
+    request<Purchase>(`/inventory/purchases/${purchaseId}/payments`, { method: 'POST', body: JSON.stringify(data) }),
+
+  listRecipes: () => request<Recipe[]>('/inventory/recipes'),
+  getItemRecipes: (menuItemId: string) => request<Recipe[]>(`/inventory/recipes/item/${menuItemId}`),
+  createOrUpdateRecipe: (data: any) => request<Recipe>('/inventory/recipes', { method: 'POST', body: JSON.stringify(data) }),
+  deleteRecipe: (id: string) => request<{ message: string }>(`/inventory/recipes/${id}`, { method: 'DELETE' }),
+
+  recordWastage: (data: any) => request<WastageRecord>('/inventory/wastage', { method: 'POST', body: JSON.stringify(data) }),
+  listWastage: () => request<WastageRecord[]>('/inventory/wastage'),
+
+  recordAdjustment: (data: any) => request<StockMovement>('/inventory/adjustments', { method: 'POST', body: JSON.stringify(data) }),
+  listMovements: (itemId?: string, movementType?: string) => {
+    const q = new URLSearchParams();
+    if (itemId) q.append('inventory_item_id', itemId);
+    if (movementType) q.append('movement_type', movementType);
+    const qs = q.toString();
+    return request<StockMovement[]>(`/inventory/movements${qs ? `?${qs}` : ''}`);
+  },
+};
+
+export const reportsApi = {
+  getOverview: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<ExecutiveOverview>(`/reports/overview?${q.toString()}`);
+  },
+  getSalesTrend: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<ReportSalesTrendPoint[]>(`/reports/sales-trend?${q.toString()}`);
+  },
+  getItemSales: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<ItemWiseSale[]>(`/reports/item-sales?${q.toString()}`);
+  },
+  getCategorySales: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<CategoryWiseSale[]>(`/reports/category-sales?${q.toString()}`);
+  },
+  getOrderTypes: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<OrderTypeSale[]>(`/reports/order-types?${q.toString()}`);
+  },
+  getPaymentMethods: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<PaymentMethodReport>(`/reports/payment-methods?${q.toString()}`);
+  },
+  getTaxes: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<TaxReportData>(`/reports/taxes?${q.toString()}`);
+  },
+  getInventory: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<InventoryAnalyticsData>(`/reports/inventory?${q.toString()}`);
+  },
+  getProfitability: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<ProfitabilityData>(`/reports/profitability?${q.toString()}`);
+  },
+  getExportCsvUrl: (reportType: string, rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ report_type: reportType, range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return `/api/v1/reports/export-csv?${q.toString()}`;
+  },
 };

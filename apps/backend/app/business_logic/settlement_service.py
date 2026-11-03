@@ -156,6 +156,13 @@ def process_order_settlement(
         order.status = "completed"
         order.payment_status = "paid"
 
+        # Deduct stock for order recipes idempotently
+        try:
+            from app.business_logic.inventory_service import consume_stock_for_order
+            consume_stock_for_order(db, order)
+        except Exception as e:
+            logger.error(f"Failed to consume stock for order {order.id}: {e}")
+
         # Release table if dine-in
         if order.table_id:
             table = db.query(RestaurantTable).filter(RestaurantTable.id == order.table_id).first()

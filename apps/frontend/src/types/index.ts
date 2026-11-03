@@ -415,3 +415,267 @@ export interface DashboardMetrics {
   recent_orders: RecentOrderSummary[];
   payment_summary: PaymentSummaryItem[];
 }
+
+// --- INVENTORY TYPES ---
+export interface InventoryCategory {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Supplier {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  gstin?: string;
+  gst_number?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  sku?: string;
+  category_id?: string;
+  category_name?: string;
+  supplier_id?: string;
+  supplier_name?: string;
+  unit: string;
+  current_stock: number;
+  minimum_stock: number;
+  reorder_level: number;
+  cost_per_unit_paise: number;
+  stock_value_paise: number;
+  is_active: boolean;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PurchaseItem {
+  id: string;
+  inventory_item_id: string;
+  item_name?: string;
+  quantity: number;
+  unit: string;
+  unit_cost_paise: number;
+  total_cost_paise: number;
+}
+
+export interface SupplierPayment {
+  id: string;
+  amount_paise: number;
+  payment_method: string;
+  reference_number?: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface Purchase {
+  id: string;
+  restaurant_id: string;
+  purchase_number: string;
+  supplier_id?: string;
+  supplier_name?: string;
+  invoice_number?: string;
+  purchase_date?: string;
+  status: 'draft' | 'received' | 'cancelled';
+  subtotal_paise: number;
+  tax_paise: number;
+  total_cost_paise: number;
+  paid_amount_paise: number;
+  due_amount_paise: number;
+  notes?: string;
+  items: PurchaseItem[];
+  payments: SupplierPayment[];
+  created_at?: string;
+}
+
+export interface RecipeIngredient {
+  id: string;
+  inventory_item_id: string;
+  inventory_item_name?: string;
+  quantity: number;
+  unit: string;
+  cost_per_unit_paise: number;
+  total_cost_paise: number;
+}
+
+export interface Recipe {
+  id: string;
+  restaurant_id: string;
+  menu_item_id: string;
+  menu_item_name?: string;
+  variant_id?: string;
+  variant_name?: string;
+  notes?: string;
+  ingredients: RecipeIngredient[];
+  total_cost_paise: number;
+  created_at?: string;
+}
+
+export interface WastageRecord {
+  id: string;
+  inventory_item_id: string;
+  item_name?: string;
+  quantity: number;
+  unit?: string;
+  cost_paise: number;
+  reason: string;
+  notes?: string;
+  created_at?: string;
+}
+
+export interface StockMovement {
+  id: string;
+  inventory_item_id: string;
+  item_name?: string;
+  movement_type: string;
+  quantity_change: number;
+  quantity_after: number;
+  unit?: string;
+  unit_cost_paise: number;
+  total_cost_paise: number;
+  reference_type?: string;
+  reference_id?: string;
+  reason?: string;
+  created_at?: string;
+}
+
+export interface InventoryDashboardData {
+  total_items: number;
+  total_stock_value_paise: number;
+  low_stock_count: number;
+  out_of_stock_count: number;
+  today_purchases_paise: number;
+  today_consumption_paise: number;
+  today_wastage_paise: number;
+  low_stock_items: InventoryItem[];
+  recent_movements: StockMovement[];
+  top_consumed_ingredients: {
+    name: string;
+    unit: string;
+    quantity: number;
+    cost_paise: number;
+  }[];
+}
+
+// --- REPORTS & ANALYTICS TYPES ---
+export interface ExecutiveOverview {
+  start_date: string;
+  end_date: string;
+  total_orders_count: number;
+  cancelled_orders_count: number;
+  gross_sales_paise: number;
+  discount_paise: number;
+  net_sales_paise: number;
+  tax_paise: number;
+  grand_total_paise: number;
+  aov_paise: number;
+  payments_collected_paise: number;
+  refunds_issued_paise: number;
+  outstanding_dues_paise: number;
+  sales_growth_pct: number;
+  orders_growth_pct: number;
+}
+
+export interface ReportSalesTrendPoint {
+  date: string;
+  orders_count: number;
+  gross_sales_paise: number;
+  discount_paise: number;
+  net_sales_paise: number;
+  tax_paise: number;
+  grand_total_paise: number;
+}
+
+export interface ItemWiseSale {
+  menu_item_id: string;
+  item_name: string;
+  variant_id?: string;
+  variant_name?: string;
+  quantity_sold: number;
+  total_sales_paise: number;
+}
+
+export interface CategoryWiseSale {
+  category_name: string;
+  quantity_sold: number;
+  total_sales_paise: number;
+  percentage: number;
+}
+
+export interface OrderTypeSale {
+  order_type: string;
+  label: string;
+  orders_count: number;
+  net_sales_paise: number;
+  grand_total_paise: number;
+  percentage: number;
+}
+
+export interface PaymentBreakdownItem {
+  method: string;
+  label: string;
+  count: number;
+  amount_paise: number;
+  percentage: number;
+}
+
+export interface PaymentMethodReport {
+  total_collected_paise: number;
+  payment_count: number;
+  breakdown: PaymentBreakdownItem[];
+}
+
+export interface TaxInvoiceEntry {
+  invoice_number: string;
+  created_at?: string;
+  taxable_amount_paise: number;
+  cgst_paise: number;
+  sgst_paise: number;
+  igst_paise: number;
+  total_tax_paise: number;
+  grand_total_paise: number;
+  status: string;
+}
+
+export interface TaxReportData {
+  taxable_amount_paise: number;
+  cgst_paise: number;
+  sgst_paise: number;
+  igst_paise: number;
+  total_tax_paise: number;
+  grand_total_paise: number;
+  invoices_count: number;
+  invoices: TaxInvoiceEntry[];
+}
+
+export interface InventoryAnalyticsData {
+  total_items_count: number;
+  total_stock_value_paise: number;
+  low_stock_count: number;
+  low_stock_items: any[];
+  purchases_cost_paise: number;
+  consumption_cost_paise: number;
+  wastage_cost_paise: number;
+  wastage_records: any[];
+}
+
+export interface ProfitabilityData {
+  net_sales_paise: number;
+  cogs_paise: number;
+  gross_profit_paise: number;
+  gross_margin_pct: number;
+  recipe_coverage_pct: number;
+  disclaimer: string;
+}
