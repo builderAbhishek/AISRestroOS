@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { restaurantApi } from '@/services/api';
+import { restaurantApi, printingApi } from '@/services/api';
 import { useUIStore } from '@/store/uiStore';
 import { Restaurant } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -21,7 +21,8 @@ import {
 
 export const SettingsView: React.FC = () => {
   const queryClient = useQueryClient();
-  const { addToast } = useUIStore();
+  const { addToast, openReceiptModal } = useUIStore();
+  const [isTestPrinting, setIsTestPrinting] = useState(false);
 
   const { data: restaurant, isLoading } = useQuery({
     queryKey: ['restaurant'],
@@ -134,6 +135,26 @@ export const SettingsView: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['tables'] });
     } catch (err: any) {
       addToast({ type: 'error', title: 'Error', description: err.message });
+    }
+  };
+
+  const handleTestPrint = async (format: '58mm' | '80mm') => {
+    setIsTestPrinting(true);
+    try {
+      const res = await printingApi.testPrint({
+        printer_name: 'Default Thermal',
+        paper_format: format,
+      });
+      openReceiptModal(res.receipt_text, 'TEST-PRINT');
+      addToast({
+        type: 'success',
+        title: 'Test Print Generated',
+        description: res.message,
+      });
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Test Print Failed', description: err.message });
+    } finally {
+      setIsTestPrinting(false);
     }
   };
 
@@ -405,6 +426,40 @@ export const SettingsView: React.FC = () => {
                 onChange={(e) => setKotPrefix(e.target.value)}
                 placeholder="KOT-"
               />
+            </div>
+
+            {/* Printer Test & Verification Diagnostics */}
+            <div className="p-3.5 rounded-xl border border-[#E8EAF0] bg-[#FAFAFB] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-[#202124]">Printer Verification & Diagnostics</span>
+                <p className="text-[11px] text-[#6B7280]">
+                  Generate a diagnostic test slip to verify printer connection and alignment
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTestPrint('80mm')}
+                  disabled={isTestPrinting}
+                  className="text-xs font-semibold gap-1.5"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Test 80mm
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTestPrint('58mm')}
+                  disabled={isTestPrinting}
+                  className="text-xs font-semibold gap-1.5"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  Test 58mm
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

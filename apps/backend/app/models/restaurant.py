@@ -60,5 +60,7 @@ class RestaurantSettings(TimestampedUUIDModel):
         Text, default="Thank you for dining with us! Please visit again.", nullable=False
     )
     auto_cut_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    receipt_printer_type: Mapped[str] = mapped_column(String(30), default="thermal", nullable=False)
+    default_print_format: Mapped[str] = mapped_column(String(20), default="80mm", nullable=False)
 
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="settings")

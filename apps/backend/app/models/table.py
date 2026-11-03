@@ -17,5 +17,6 @@ class RestaurantTable(TimestampedUUIDModel):
     status: Mapped[str] = mapped_column(String(20), default="available", nullable=False, index=True)
     current_order_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="tables")

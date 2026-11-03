@@ -1,7 +1,9 @@
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
-export type OrderStatus = 'active' | 'completed' | 'cancelled';
-export type TableStatus = 'available' | 'occupied' | 'reserved';
+export type OrderStatus = 'open' | 'active' | 'bill_generated' | 'completed' | 'cancelled';
+export type PaymentStatus = 'unpaid' | 'partially_paid' | 'paid' | 'refunded';
+export type TableStatus = 'available' | 'occupied' | 'bill_generated' | 'reserved';
 export type PaymentMethod = 'cash' | 'upi' | 'card' | 'other';
+export type PaperFormat = '58mm' | '80mm' | 'a4';
 
 export interface RestaurantSettings {
   id: string;
@@ -14,6 +16,8 @@ export interface RestaurantSettings {
   kot_printer_name: string;
   bill_printer_name: string;
   paper_width_mm: number;
+  receipt_printer_type?: string;
+  default_print_format?: PaperFormat;
   invoice_prefix: string;
   kot_prefix: string;
   bill_footer_text: string;
@@ -115,8 +119,25 @@ export interface RestaurantTable {
   status: TableStatus;
   current_order_id?: string;
   is_active: boolean;
+  display_order: number;
   created_at: string;
   updated_at: string;
+
+  // Active order snapshots
+  current_order_code?: string;
+  current_order_total_paise?: number;
+  current_order_total_inr?: number;
+  current_order_paid_paise?: number;
+  current_order_due_paise?: number;
+  current_order_due_inr?: number;
+  current_order_created_at?: string;
+}
+
+export interface TableStats {
+  total_tables: number;
+  available_tables: number;
+  occupied_tables: number;
+  bill_pending_tables: number;
 }
 
 export interface OrderItemAddon {
@@ -158,6 +179,11 @@ export interface Order {
   customer_phone?: string;
   customer_address?: string;
   status: OrderStatus;
+  payment_status: PaymentStatus;
+  paid_amount_paise: number;
+  paid_amount_inr: number;
+  due_amount_paise: number;
+  due_amount_inr: number;
   subtotal_paise: number;
   subtotal_inr: number;
   discount_type?: 'percentage' | 'amount';
@@ -180,7 +206,11 @@ export interface Order {
   total_paise: number;
   total_inr: number;
   notes?: string;
+  cancellation_reason?: string;
+  cancelled_at?: string;
   items: OrderItem[];
+  kots?: KOT[];
+  invoice?: Invoice;
   created_at: string;
   updated_at: string;
 }
@@ -229,6 +259,32 @@ export interface Payment {
   created_at: string;
 }
 
+export interface Refund {
+  id: string;
+  invoice_id: string;
+  order_id: string;
+  amount_paise: number;
+  amount_inr: number;
+  reason: string;
+  payment_method: string;
+  reference_number?: string;
+  created_at: string;
+}
+
+export interface PrintJob {
+  id: string;
+  restaurant_id: string;
+  order_id?: string;
+  invoice_id?: string;
+  job_type: string;
+  printer_name?: string;
+  paper_format: PaperFormat;
+  status: string;
+  content_preview?: string;
+  error_message?: string;
+  created_at: string;
+}
+
 export interface Invoice {
   id: string;
   order_id: string;
@@ -253,12 +309,13 @@ export interface Invoice {
   grand_total_paise: number;
   grand_total_inr: number;
   rounded_paise: number;
-  status: 'unpaid' | 'partially_paid' | 'paid';
+  status: 'unpaid' | 'partially_paid' | 'paid' | 'refunded' | 'cancelled';
   paid_amount_paise: number;
   paid_amount_inr: number;
   due_amount_paise: number;
   due_amount_inr: number;
   payments: Payment[];
+  refunds: Refund[];
   created_at: string;
 }
 

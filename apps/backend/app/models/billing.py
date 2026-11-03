@@ -34,6 +34,9 @@ class Invoice(TimestampedUUIDModel):
     payments: Mapped[List["Payment"]] = relationship(
         "Payment", back_populates="invoice", cascade="all, delete-orphan", order_by="Payment.created_at"
     )
+    refunds: Mapped[List["Refund"]] = relationship(
+        "Refund", back_populates="invoice", cascade="all, delete-orphan", order_by="Refund.created_at"
+    )
 
 
 class Payment(TimestampedUUIDModel):
@@ -54,3 +57,22 @@ class Payment(TimestampedUUIDModel):
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     invoice: Mapped["Invoice"] = relationship("Invoice", back_populates="payments")
+
+
+class Refund(TimestampedUUIDModel):
+    __tablename__ = "refunds"
+
+    invoice_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("invoices.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    order_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Payment method: cash | upi | card | original | other
+    payment_method: Mapped[str] = mapped_column(String(20), default="original", nullable=False)
+    reference_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+    invoice: Mapped["Invoice"] = relationship("Invoice", back_populates="refunds")
+    order: Mapped["Order"] = relationship("Order", back_populates="refunds")

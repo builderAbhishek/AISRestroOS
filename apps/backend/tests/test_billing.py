@@ -81,7 +81,7 @@ def test_split_payment_and_partial_payment(client, setup_test_restaurant):
     )
     assert part_res.status_code == 200
     part_data = part_res.json()
-    assert part_data["order_status"] == "active"
+    assert part_data["order_status"] in ("active", "bill_generated")
     assert part_data["invoice"]["status"] == "partially_paid"
     assert part_data["invoice"]["due_amount_paise"] == (grand_total - half_payment)
 

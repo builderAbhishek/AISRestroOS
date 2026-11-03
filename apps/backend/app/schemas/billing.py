@@ -34,6 +34,51 @@ class PaymentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RefundResponse(BaseModel):
+    id: str
+    invoice_id: str
+    order_id: str
+    amount_paise: int
+    reason: str
+    payment_method: str
+    reference_number: Optional[str]
+    created_at: datetime
+
+    @computed_field
+    def amount_inr(self) -> float:
+        return self.amount_paise / 100.0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RefundRequest(BaseModel):
+    amount_paise: int = Field(..., gt=0)
+    reason: str = Field(..., min_length=2, max_length=255)
+    payment_method: str = Field(default="original")
+    reference_number: Optional[str] = None
+
+
+class PrintJobResponse(BaseModel):
+    id: str
+    restaurant_id: str
+    order_id: Optional[str]
+    invoice_id: Optional[str]
+    job_type: str
+    printer_name: Optional[str]
+    paper_format: str
+    status: str
+    content_preview: Optional[str]
+    error_message: Optional[str]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TestPrintRequest(BaseModel):
+    printer_name: Optional[str] = "Default"
+    paper_format: str = Field(default="80mm", pattern="^(58mm|80mm|a4)$")
+
+
 class InvoiceResponse(BaseModel):
     id: str
     order_id: str
@@ -54,6 +99,7 @@ class InvoiceResponse(BaseModel):
     paid_amount_paise: int
     due_amount_paise: int
     payments: List[PaymentResponse] = []
+    refunds: List[RefundResponse] = []
     created_at: datetime
 
     @computed_field

@@ -1,5 +1,6 @@
 from typing import Optional, List
-from sqlalchemy import String, Integer, Float, Boolean, Text, ForeignKey
+from datetime import datetime
+from sqlalchemy import String, Integer, Float, Boolean, Text, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import TimestampedUUIDModel
 
@@ -24,8 +25,16 @@ class Order(TimestampedUUIDModel):
     customer_phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     customer_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    # Status: active | completed | cancelled
+    # Status: active | bill_generated | completed | cancelled
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, index=True)
+    # Payment status: unpaid | partially_paid | paid | refunded
+    payment_status: Mapped[str] = mapped_column(String(20), default="unpaid", nullable=False, index=True)
+    paid_amount_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    due_amount_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # Cancellation audit
+    cancellation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Money in integer paise
     subtotal_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -55,6 +64,9 @@ class Order(TimestampedUUIDModel):
     )
     invoice: Mapped[Optional["Invoice"]] = relationship(
         "Invoice", back_populates="order", uselist=False, cascade="all, delete-orphan"
+    )
+    refunds: Mapped[List["Refund"]] = relationship(
+        "Refund", back_populates="order", cascade="all, delete-orphan", order_by="Refund.created_at"
     )
 
 

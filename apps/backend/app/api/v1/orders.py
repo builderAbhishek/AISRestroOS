@@ -8,10 +8,14 @@ from app.models.restaurant import Restaurant, RestaurantSettings
 from app.models.table import RestaurantTable
 from app.models.order import Order, OrderItem, OrderItemAddon
 from app.models.menu import MenuItem, MenuVariant, Addon
-from app.schemas.order import OrderCreate, OrderUpdateItems, OrderResponse
+from app.schemas.order import OrderCreate, OrderUpdateItems, OrderResponse, OrderCancelRequest
 from app.business_logic.pricing_calculator import (
     calculate_item_price_paise,
     calculate_order_financials,
+)
+from app.business_logic.order_service import (
+    filter_orders_query,
+    cancel_order_with_audit,
 )
 from app.core.exceptions import (
     EntityNotFoundException,
@@ -166,6 +170,10 @@ def create_order(
     order.igst_paise = financials.get("igst_paise", 0)
     order.tax_paise = financials["tax_paise"]
     order.total_paise = financials["grand_total_paise"]
+    order.due_amount_paise = max(0, financials["grand_total_paise"] - (order.paid_amount_paise or 0))
+    order.paid_amount_paise = 0
+    order.due_amount_paise = financials["grand_total_paise"]
+    order.payment_status = "unpaid"
 
     # If dine_in, mark table occupied and link active order
     if table:
@@ -310,6 +318,7 @@ def update_order_items(
     order.igst_paise = financials.get("igst_paise", 0)
     order.tax_paise = financials["tax_paise"]
     order.total_paise = financials["grand_total_paise"]
+    order.due_amount_paise = max(0, financials["grand_total_paise"] - (order.paid_amount_paise or 0))
 
     db.commit()
     db.refresh(order)
@@ -318,26 +327,43 @@ def update_order_items(
 
 @router.get("", response_model=List[OrderResponse])
 def list_orders(
-    status: Optional[str] = None,
+    search: Optional[str] = None,
+    table_number: Optional[str] = None,
     order_type: Optional[str] = None,
-    limit: int = 50,
+    status: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quick_filter: Optional[str] = None,
+    limit: int = 100,
     offset: int = 0,
     restaurant: Restaurant = Depends(require_restaurant),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Order).filter(Order.restaurant_id == restaurant.id)
-
-    if status:
-        query = query.filter(Order.status == status)
-    if order_type:
-        query = query.filter(Order.order_type == order_type)
-
-    return (
-        query.order_by(Order.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
+    """
+    Retrieves filtered orders list with full support for:
+    - Search (order code, customer name/phone, table number)
+    - Specific table number
+    - Order type (dine_in, takeaway, delivery)
+    - Order status (open, bill_generated, completed, cancelled)
+    - Payment status (unpaid, partially_paid, paid, refunded)
+    - Date ranges (start_date, end_date)
+    - Quick filters (today, active, completed, cancelled, unpaid)
+    """
+    query = filter_orders_query(
+        db=db,
+        restaurant_id=restaurant.id,
+        search=search,
+        table_number=table_number,
+        order_type=order_type,
+        status=status,
+        payment_status=payment_status,
+        start_date=start_date,
+        end_date=end_date,
+        quick_filter=quick_filter,
     )
+
+    return query.offset(offset).limit(limit).all()
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
@@ -359,9 +385,15 @@ def get_order_details(
 @router.post("/{order_id}/cancel", response_model=OrderResponse)
 def cancel_order(
     order_id: str,
+    data: Optional[OrderCancelRequest] = None,
     restaurant: Restaurant = Depends(require_restaurant),
     db: Session = Depends(get_db),
 ):
+    """
+    Cancels an active or bill-generated order with mandatory or default audit reason.
+    Releases any occupied table back to available.
+    Settled orders (completed) cannot be cancelled.
+    """
     order = (
         db.query(Order)
         .filter(Order.id == order_id, Order.restaurant_id == restaurant.id)
@@ -369,19 +401,6 @@ def cancel_order(
     )
     if not order:
         raise EntityNotFoundException("Order", order_id)
-    if order.status == "completed":
-        raise InvalidOrderStateException("Cannot cancel an already completed and settled order.")
 
-    order.status = "cancelled"
-
-    # Release table if dine-in
-    if order.table_id:
-        table = db.query(RestaurantTable).filter(RestaurantTable.id == order.table_id).first()
-        if table and table.current_order_id == order.id:
-            table.status = "available"
-            table.current_order_id = None
-
-    db.commit()
-    db.refresh(order)
-    logger.info(f"Cancelled order {order.order_code}")
-    return order
+    reason = data.reason if data and data.reason else "Cancelled by operator"
+    return cancel_order_with_audit(db=db, order=order, reason=reason)

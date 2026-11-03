@@ -40,7 +40,7 @@ interface UIState {
   isKOTModalOpen: boolean;
   kotPrintResult: KOTPrintResult | null;
   isReceiptModalOpen: boolean;
-  receiptModalData: { receiptText: string; invoiceNumber: string } | null;
+  receiptModalData: { receiptText: string; invoiceNumber: string; orderId?: string } | null;
 
   // Toasts
   toasts: ToastMessage[];
@@ -57,7 +57,7 @@ interface UIState {
   closeSettlementModal: () => void;
   openKOTModal: (result: KOTPrintResult) => void;
   closeKOTModal: () => void;
-  openReceiptModal: (receiptText: string, invoiceNumber: string) => void;
+  openReceiptModal: (receiptText: string, invoiceNumber: string, orderId?: string) => void;
   closeReceiptModal: () => void;
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
@@ -137,8 +137,8 @@ export const useUIStore = create<UIState>((set) => ({
   closeKOTModal: () =>
     set({ isKOTModalOpen: false, kotPrintResult: null }),
 
-  openReceiptModal: (receiptText, invoiceNumber) =>
-    set({ isReceiptModalOpen: true, receiptModalData: { receiptText, invoiceNumber } }),
+  openReceiptModal: (receiptText, invoiceNumber, orderId) =>
+    set({ isReceiptModalOpen: true, receiptModalData: { receiptText, invoiceNumber, orderId } }),
   closeReceiptModal: () =>
     set({ isReceiptModalOpen: false, receiptModalData: null }),
 

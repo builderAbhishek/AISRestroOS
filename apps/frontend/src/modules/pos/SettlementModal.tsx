@@ -6,18 +6,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Badge } from '@/components/ui/Badge';
-import { formatINR, formatINRNumber } from '@/lib/utils';
+import { formatINR } from '@/lib/utils';
 import { PaymentMethod } from '@/types';
 import {
   Banknote,
   QrCode,
   CreditCard,
-  Layers,
   CheckCircle2,
   Receipt,
   Plus,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const SettlementModal: React.FC = () => {
@@ -35,6 +34,8 @@ export const SettlementModal: React.FC = () => {
 
   const [activePaymentMode, setActivePaymentMode] = useState<'single' | 'split'>('single');
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cash');
+  const [isPartialPayment, setIsPartialPayment] = useState(false);
+  const [paymentAmountINR, setPaymentAmountINR] = useState<string>('');
   const [tenderedAmountINR, setTenderedAmountINR] = useState<string>('');
   const [referenceNumber, setReferenceNumber] = useState<string>('');
 
@@ -55,7 +56,7 @@ export const SettlementModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch verified bill calculation from backend
-  const { data: billCalc, refetch: refetchBill } = useQuery({
+  const { data: billCalc } = useQuery({
     queryKey: ['bill-calc', order?.id, discountType, discountValue],
     queryFn: () =>
       billingApi.calculateBill(order!.id, {
@@ -67,28 +68,57 @@ export const SettlementModal: React.FC = () => {
 
   const grandTotalPaise = billCalc ? billCalc.grand_total_paise : order?.total_paise || 0;
   const grandTotalINR = grandTotalPaise / 100.0;
+  const previouslyPaidPaise = order?.paid_amount_paise || 0;
+  const remainingDuePaise = Math.max(0, grandTotalPaise - previouslyPaidPaise);
+  const remainingDueINR = remainingDuePaise / 100.0;
 
   useEffect(() => {
-    if (grandTotalINR > 0 && (!tenderedAmountINR || parseFloat(tenderedAmountINR) < grandTotalINR)) {
-      setTenderedAmountINR(grandTotalINR.toString());
+    if (remainingDueINR > 0) {
+      if (!isPartialPayment) {
+        setPaymentAmountINR(remainingDueINR.toFixed(2));
+      }
+      setTenderedAmountINR(remainingDueINR.toFixed(2));
     }
-  }, [grandTotalINR]);
+  }, [remainingDueINR, isPartialPayment]);
 
   if (!order) return null;
 
-  const tenderedPaise = Math.round((parseFloat(tenderedAmountINR) || grandTotalINR) * 100);
-  const changeDuePaise = Math.max(0, tenderedPaise - grandTotalPaise);
+  const currentPayPaise = Math.round((parseFloat(paymentAmountINR) || remainingDueINR) * 100);
+  const balanceAfterThisPayPaise = Math.max(0, remainingDuePaise - currentPayPaise);
+
+  const tenderedPaise = Math.round((parseFloat(tenderedAmountINR) || currentPayPaise / 100.0) * 100);
+  const changeDuePaise = selectedMethod === 'cash' ? Math.max(0, tenderedPaise - currentPayPaise) : 0;
 
   const handleSettle = async () => {
     setIsSubmitting(true);
     try {
+      if (currentPayPaise <= 0) {
+        addToast({
+          type: 'error',
+          title: 'Invalid Payment Amount',
+          description: 'Payment amount must be greater than ₹0.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (currentPayPaise > remainingDuePaise) {
+        addToast({
+          type: 'error',
+          title: 'Overpayment Blocked',
+          description: `Payment (₹${(currentPayPaise / 100).toFixed(2)}) cannot exceed remaining due (₹${remainingDueINR.toFixed(2)}).`,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       let paymentsPayload = [];
 
       if (activePaymentMode === 'single') {
         paymentsPayload.push({
           payment_method: selectedMethod,
-          amount_paise: grandTotalPaise,
-          tendered_amount_paise: selectedMethod === 'cash' ? tenderedPaise : grandTotalPaise,
+          amount_paise: currentPayPaise,
+          tendered_amount_paise: selectedMethod === 'cash' ? tenderedPaise : currentPayPaise,
           reference_number: referenceNumber.trim() || undefined,
         });
       } else {
@@ -96,11 +126,11 @@ export const SettlementModal: React.FC = () => {
           (sum, sp) => sum + Math.round((sp.amountINR || 0) * 100),
           0
         );
-        if (totalSplitPaise < grandTotalPaise) {
+        if (totalSplitPaise !== currentPayPaise) {
           addToast({
             type: 'error',
-            title: 'Incomplete Split Payment',
-            description: `Split total (₹${totalSplitPaise / 100}) does not cover grand total (₹${grandTotalINR}).`,
+            title: 'Split Mismatch',
+            description: `Split total (₹${(totalSplitPaise / 100).toFixed(2)}) must exactly equal target payment (₹${(currentPayPaise / 100).toFixed(2)}).`,
           });
           setIsSubmitting(false);
           return;
@@ -123,11 +153,10 @@ export const SettlementModal: React.FC = () => {
 
       addToast({
         type: 'success',
-        title: 'Order Settled Successfully!',
-        description: `Order ${order.order_code} marked completed. Receipt generated.`,
+        title: result.order_status === 'completed' ? 'Order Settled Full!' : 'Partial Payment Recorded',
+        description: result.message,
       });
 
-      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['tables'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
@@ -135,8 +164,8 @@ export const SettlementModal: React.FC = () => {
       clearCart();
       closeSettlementModal();
 
-      // Open print receipt modal
-      openReceiptModal(result.receipt_text, result.invoice.invoice_number);
+      // Open print receipt modal with formatted customer text
+      openReceiptModal(result.receipt_text, result.invoice.invoice_number, order.id);
     } catch (err: any) {
       addToast({
         type: 'error',
@@ -158,9 +187,9 @@ export const SettlementModal: React.FC = () => {
       }`}
       maxWidth="lg"
     >
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* Invoice Summary Breakdown */}
-        <div className="rounded-xl border border-[#E8EAF0] bg-[#FAFAFB] p-4 space-y-2 text-xs">
+        <div className="rounded-xl border border-[#E8EAF0] bg-[#FAFAFB] p-3.5 space-y-2 text-xs">
           <div className="flex justify-between text-[#6B7280]">
             <span>Items Subtotal</span>
             <span className="font-semibold text-[#202124]">
@@ -178,7 +207,7 @@ export const SettlementModal: React.FC = () => {
                   setDiscountType(null);
                   setDiscountValue(0);
                 }}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
                   !discountType ? 'bg-[#F07818] text-white' : 'bg-white border text-[#6B7280]'
                 }`}
               >
@@ -190,7 +219,7 @@ export const SettlementModal: React.FC = () => {
                   setDiscountType('percentage');
                   setDiscountValue(5);
                 }}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
                   discountType === 'percentage' && discountValue === 5
                     ? 'bg-[#F07818] text-white'
                     : 'bg-white border text-[#6B7280]'
@@ -204,7 +233,7 @@ export const SettlementModal: React.FC = () => {
                   setDiscountType('percentage');
                   setDiscountValue(10);
                 }}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer ${
                   discountType === 'percentage' && discountValue === 10
                     ? 'bg-[#F07818] text-white'
                     : 'bg-white border text-[#6B7280]'
@@ -212,7 +241,7 @@ export const SettlementModal: React.FC = () => {
               >
                 10%
               </button>
-              <span className="font-bold text-[#D94343] ml-2">
+              <span className="font-bold text-[#DC2626] ml-2">
                 -{formatINR(billCalc?.discount_paise || 0)}
               </span>
             </div>
@@ -225,12 +254,75 @@ export const SettlementModal: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex justify-between items-baseline pt-2 border-t border-[#E8EAF0] text-sm">
+          <div className="flex justify-between items-baseline pt-1.5 border-t border-[#E8EAF0] text-sm">
             <span className="font-bold text-[#202124]">Grand Total</span>
-            <span className="text-xl font-extrabold text-[#F07818]">
+            <span className="text-lg font-black text-[#202124]">
               {formatINR(grandTotalPaise)}
             </span>
           </div>
+
+          {previouslyPaidPaise > 0 && (
+            <div className="flex justify-between text-xs text-[#16A34A] font-medium">
+              <span>Previously Paid:</span>
+              <span>{formatINR(previouslyPaidPaise)}</span>
+            </div>
+          )}
+
+          <div className="flex justify-between items-baseline pt-1 border-t border-[#CBD5E1] text-sm">
+            <span className="font-bold text-[#EA580C]">Remaining Due</span>
+            <span className="text-xl font-black text-[#F07818]">
+              {formatINR(remainingDuePaise)}
+            </span>
+          </div>
+        </div>
+
+        {/* Partial Payment Option */}
+        <div className="p-3 bg-white rounded-xl border border-[#E8EAF0] space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-[#202124] flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPartialPayment}
+                onChange={(e) => {
+                  setIsPartialPayment(e.target.checked);
+                  if (!e.target.checked) {
+                    setPaymentAmountINR(remainingDueINR.toFixed(2));
+                  }
+                }}
+                className="h-4 w-4 rounded text-[#F07818] focus:ring-[#F07818]"
+              />
+              Accept Partial Payment
+            </label>
+            <span className="text-[11px] text-[#6B7280]">
+              {isPartialPayment ? 'Custom amount entry enabled' : 'Settling full due amount'}
+            </span>
+          </div>
+
+          {isPartialPayment && (
+            <div className="pt-2 grid grid-cols-2 gap-3 border-t border-[#E8EAF0]">
+              <div>
+                <label className="text-[11px] font-semibold text-[#374151] block mb-1">
+                  Payment Amount to Collect (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  max={remainingDueINR}
+                  value={paymentAmountINR}
+                  onChange={(e) => setPaymentAmountINR(e.target.value)}
+                  className="w-full text-xs p-2 rounded-lg border border-[#E8EAF0] focus:border-[#F07818] focus:outline-none font-bold"
+                />
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-[#6B7280] block mb-1">
+                  Balance Remaining After This
+                </span>
+                <span className="text-sm font-bold text-[#DC2626] block pt-1.5">
+                  {formatINR(balanceAfterThisPayPaise)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Payment Mode Selector */}
@@ -243,7 +335,7 @@ export const SettlementModal: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActivePaymentMode('single')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                   activePaymentMode === 'single'
                     ? 'bg-white text-[#202124] shadow-2xs'
                     : 'text-[#6B7280]'
@@ -253,8 +345,14 @@ export const SettlementModal: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => setActivePaymentMode('split')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                onClick={() => {
+                  setActivePaymentMode('split');
+                  setSplitPayments([
+                    { method: 'upi', amountINR: Math.round(currentPayPaise / 200) },
+                    { method: 'cash', amountINR: (currentPayPaise / 100) - Math.round(currentPayPaise / 200) },
+                  ]);
+                }}
+                className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                   activePaymentMode === 'split'
                     ? 'bg-white text-[#202124] shadow-2xs'
                     : 'text-[#6B7280]'
@@ -279,7 +377,7 @@ export const SettlementModal: React.FC = () => {
                     key={m.id}
                     type="button"
                     onClick={() => setSelectedMethod(m.id as PaymentMethod)}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border font-semibold text-xs transition-all cursor-pointer ${
+                    className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border font-semibold text-xs transition-all cursor-pointer ${
                       selectedMethod === m.id
                         ? 'border-[#F07818] bg-[#FFF0E3] text-[#C85A0A] shadow-xs'
                         : 'border-[#E8EAF0] bg-white text-[#6B7280] hover:bg-[#F7F8FA]'
@@ -293,20 +391,20 @@ export const SettlementModal: React.FC = () => {
 
               {/* Cash Tendered & Change Due */}
               {selectedMethod === 'cash' && (
-                <div className="rounded-xl border border-[#E8EAF0] p-4 bg-white space-y-3">
+                <div className="rounded-xl border border-[#E8EAF0] p-3.5 bg-white space-y-2">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1">
                       <Input
-                        label="Cash Tendered by Customer (₹)"
+                        label="Cash Given by Customer (₹)"
                         type="number"
                         value={tenderedAmountINR}
                         onChange={(e) => setTenderedAmountINR(e.target.value)}
-                        placeholder={grandTotalINR.toString()}
+                        placeholder={(currentPayPaise / 100).toString()}
                       />
                     </div>
                     <div className="text-right">
-                      <span className="text-xs font-semibold text-[#6B7280]">Change Return Due</span>
-                      <p className="text-lg font-bold text-[#16865B] mt-1">
+                      <span className="text-xs font-semibold text-[#6B7280]">Change to Return</span>
+                      <p className="text-lg font-bold text-[#16865B] mt-0.5">
                         {formatINR(changeDuePaise)}
                       </p>
                     </div>
@@ -314,11 +412,11 @@ export const SettlementModal: React.FC = () => {
 
                   {/* Quick Tender Chips */}
                   <div className="flex items-center gap-1.5 pt-1 flex-wrap">
-                    <span className="text-[11px] text-[#6B7280]">Exact / Notes:</span>
+                    <span className="text-[11px] text-[#6B7280]">Quick Notes:</span>
                     {[
-                      { label: 'Exact', val: grandTotalINR },
-                      { label: '+₹100', val: Math.ceil(grandTotalINR / 100) * 100 },
-                      { label: '+₹500', val: Math.ceil(grandTotalINR / 500) * 500 },
+                      { label: 'Exact', val: currentPayPaise / 100 },
+                      { label: '+₹100', val: Math.ceil((currentPayPaise / 100) / 100) * 100 },
+                      { label: '+₹500', val: Math.ceil((currentPayPaise / 100) / 500) * 500 },
                       { label: '₹1000', val: 1000 },
                       { label: '₹2000', val: 2000 },
                     ].map((chip, idx) => (
@@ -326,7 +424,7 @@ export const SettlementModal: React.FC = () => {
                         key={idx}
                         type="button"
                         onClick={() => setTenderedAmountINR(chip.val.toString())}
-                        className="px-2 py-0.5 rounded-md border border-[#E8EAF0] bg-[#FAFAFB] text-[11px] font-medium text-[#202124] hover:bg-[#FFF0E3] hover:border-[#F07818]"
+                        className="px-2 py-0.5 rounded-md border border-[#E8EAF0] bg-[#FAFAFB] text-[11px] font-medium text-[#202124] hover:bg-[#FFF0E3] hover:border-[#F07818] cursor-pointer"
                       >
                         {chip.label}
                       </button>
@@ -347,7 +445,11 @@ export const SettlementModal: React.FC = () => {
             </div>
           ) : (
             /* Split Payment UI */
-            <div className="space-y-3 rounded-xl border border-[#E8EAF0] p-4 bg-white">
+            <div className="space-y-2.5 rounded-xl border border-[#E8EAF0] p-3.5 bg-white">
+              <div className="flex justify-between text-xs text-[#6B7280] pb-1">
+                <span>Split Rows</span>
+                <span>Target Payment: <strong>₹{(currentPayPaise / 100).toFixed(2)}</strong></span>
+              </div>
               {splitPayments.map((sp, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <select
@@ -357,7 +459,7 @@ export const SettlementModal: React.FC = () => {
                       updated[idx].method = e.target.value as PaymentMethod;
                       setSplitPayments(updated);
                     }}
-                    className="h-10 rounded-btn border border-[#E8EAF0] bg-white px-3 text-xs font-semibold text-[#202124]"
+                    className="h-9 rounded-md border border-[#E8EAF0] bg-white px-2.5 text-xs font-semibold text-[#202124]"
                   >
                     <option value="cash">Cash</option>
                     <option value="upi">UPI</option>
@@ -380,7 +482,7 @@ export const SettlementModal: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== idx))}
-                      className="p-2 text-[#D94343] hover:bg-[#FDECEC] rounded-lg"
+                      className="p-1.5 text-[#DC2626] hover:bg-[#FEF2F2] rounded-lg cursor-pointer"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -398,7 +500,7 @@ export const SettlementModal: React.FC = () => {
                 className="gap-1 text-xs"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Add Another Split Row</span>
+                <span>Add Split Row</span>
               </Button>
             </div>
           )}
@@ -406,7 +508,7 @@ export const SettlementModal: React.FC = () => {
 
         {/* Settlement Submit Action */}
         <div className="flex items-center justify-between pt-3 border-t border-[#E8EAF0]">
-          <Button type="button" onClick={closeSettlementModal} variant="outline">
+          <Button type="button" onClick={closeSettlementModal} variant="outline" size="sm">
             Cancel
           </Button>
 
@@ -415,10 +517,14 @@ export const SettlementModal: React.FC = () => {
             onClick={handleSettle}
             variant="success"
             isLoading={isSubmitting}
-            className="px-6 gap-2 text-sm font-bold shadow-md shadow-[#16865B]/20"
+            className="px-5 gap-2 text-xs font-bold shadow-md shadow-[#16865B]/20"
           >
             <CheckCircle2 className="h-4 w-4" />
-            <span>Complete & Print Receipt • {formatINR(grandTotalPaise)}</span>
+            <span>
+              {balanceAfterThisPayPaise === 0
+                ? `Complete Settle • ${formatINR(currentPayPaise)}`
+                : `Record Partial • ${formatINR(currentPayPaise)}`}
+            </span>
           </Button>
         </div>
       </div>

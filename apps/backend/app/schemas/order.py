@@ -1,6 +1,12 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field, computed_field, ConfigDict
 from datetime import datetime
+from app.schemas.kot import KOTResponse
+from app.schemas.billing import InvoiceResponse
+
+
+class OrderCancelRequest(BaseModel):
+    reason: str = Field(..., min_length=2, max_length=255)
 
 
 class OrderItemAddonInput(BaseModel):
@@ -88,6 +94,11 @@ class OrderResponse(BaseModel):
     customer_phone: Optional[str]
     customer_address: Optional[str]
     status: str
+    payment_status: str = "unpaid"
+    paid_amount_paise: int = 0
+    due_amount_paise: int = 0
+    cancellation_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
     subtotal_paise: int
     discount_type: Optional[str]
     discount_value: float
@@ -103,8 +114,22 @@ class OrderResponse(BaseModel):
     total_paise: int
     notes: Optional[str]
     items: List[OrderItemResponse] = []
+    kots: List[KOTResponse] = []
+    invoice: Optional[InvoiceResponse] = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    def item_count(self) -> int:
+        return sum(item.quantity for item in self.items)
+
+    @computed_field
+    def paid_amount_inr(self) -> float:
+        return self.paid_amount_paise / 100.0
+
+    @computed_field
+    def due_amount_inr(self) -> float:
+        return self.due_amount_paise / 100.0
 
     @computed_field
     def subtotal_inr(self) -> float:
