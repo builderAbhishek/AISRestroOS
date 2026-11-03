@@ -417,6 +417,15 @@ def create_inventory_item(
     db: Session = Depends(get_db),
 ):
     cat_id = data.category_id
+    if cat_id:
+        existing_cat = (
+            db.query(InventoryCategory)
+            .filter(InventoryCategory.id == cat_id, InventoryCategory.restaurant_id == restaurant.id)
+            .first()
+        )
+        if not existing_cat:
+            cat_id = None
+
     if not cat_id:
         default_cat = (
             db.query(InventoryCategory)
@@ -433,17 +442,27 @@ def create_inventory_item(
             db.flush()
         cat_id = default_cat.id
 
+    sup_id = data.supplier_id
+    if sup_id:
+        existing_sup = (
+            db.query(Supplier)
+            .filter(Supplier.id == sup_id, Supplier.restaurant_id == restaurant.id)
+            .first()
+        )
+        if not existing_sup:
+            sup_id = None
+
     item = InventoryItem(
         restaurant_id=restaurant.id,
         name=data.name.strip(),
-        sku=data.sku.strip() if data.sku else None,
+        sku=data.sku.strip() if data.sku and data.sku.strip() else None,
         category_id=cat_id,
-        supplier_id=data.supplier_id,
-        unit=data.unit,
-        current_stock=data.current_stock,
-        min_stock_level=data.minimum_stock,
-        reorder_level=data.reorder_level,
-        cost_price_paise=data.cost_per_unit_paise,
+        supplier_id=sup_id,
+        unit=data.unit or "kg",
+        current_stock=data.current_stock or 0.0,
+        min_stock_level=data.minimum_stock or 0.0,
+        reorder_level=data.reorder_level or 0.0,
+        cost_price_paise=data.cost_per_unit_paise or 0,
         is_active=data.is_active,
         notes=data.notes,
     )
@@ -461,8 +480,8 @@ def create_inventory_item(
             unit=item.unit,
             previous_stock=0.0,
             new_stock=data.current_stock,
-            unit_cost_paise=data.cost_per_unit_paise,
-            total_cost_paise=int(round(data.current_stock * data.cost_per_unit_paise)),
+            unit_cost_paise=data.cost_per_unit_paise or 0,
+            total_cost_paise=int(round(data.current_stock * (data.cost_per_unit_paise or 0))),
             reason="Opening Stock",
         )
         db.add(mov)
@@ -493,7 +512,39 @@ def update_inventory_item(
     item = db.query(InventoryItem).filter(InventoryItem.id == item_id, InventoryItem.restaurant_id == restaurant.id).first()
     if not item:
         raise EntityNotFoundException("InventoryItem", item_id)
-    for field, val in data.model_dump(exclude_unset=True).items():
+    
+    update_data = data.model_dump(exclude_unset=True)
+    if "supplier_id" in update_data:
+        sup_id = update_data["supplier_id"]
+        if sup_id:
+            existing_sup = (
+                db.query(Supplier)
+                .filter(Supplier.id == sup_id, Supplier.restaurant_id == restaurant.id)
+                .first()
+            )
+            update_data["supplier_id"] = existing_sup.id if existing_sup else None
+        else:
+            update_data["supplier_id"] = None
+
+    if "category_id" in update_data:
+        cat_id = update_data["category_id"]
+        if cat_id:
+            existing_cat = (
+                db.query(InventoryCategory)
+                .filter(InventoryCategory.id == cat_id, InventoryCategory.restaurant_id == restaurant.id)
+                .first()
+            )
+            if not existing_cat:
+                del update_data["category_id"]
+
+    if "sku" in update_data:
+        sku_val = update_data["sku"]
+        update_data["sku"] = sku_val.strip() if sku_val and sku_val.strip() else None
+
+    if "name" in update_data and update_data["name"]:
+        update_data["name"] = update_data["name"].strip()
+
+    for field, val in update_data.items():
         setattr(item, field, val)
     db.commit()
     db.refresh(item)

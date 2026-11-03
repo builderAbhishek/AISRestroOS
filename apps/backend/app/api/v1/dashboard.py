@@ -241,6 +241,39 @@ def get_dashboard_metrics(
         for o in recent_orders_rows
     ]
 
+    # Cash Shift Summary
+    from app.models.cash import CashRegisterShift, Expense
+    active_shift = (
+        db.query(CashRegisterShift)
+        .filter(
+            CashRegisterShift.restaurant_id == restaurant.id,
+            CashRegisterShift.status == "open",
+        )
+        .first()
+    )
+    today_cash_exp = (
+        db.query(func.coalesce(func.sum(Expense.amount_paise), 0))
+        .filter(
+            Expense.restaurant_id == restaurant.id,
+            Expense.payment_method == "cash",
+            Expense.expense_date >= start_date,
+            Expense.expense_date <= end_date,
+        )
+        .scalar()
+        or 0
+    )
+
+    from app.schemas.dashboard import ShiftDashboardSummary
+    cash_summary = ShiftDashboardSummary(
+        has_active_shift=bool(active_shift),
+        shift_number=active_shift.shift_number if active_shift else None,
+        operator_name=active_shift.operator_name if active_shift else None,
+        opening_cash_paise=active_shift.opening_cash_paise if active_shift else 0,
+        cash_sales_paise=active_shift.cash_sales_paise if active_shift else 0,
+        current_drawer_cash_paise=active_shift.current_expected_cash_paise if active_shift else 0,
+        today_cash_expenses_paise=today_cash_exp,
+    )
+
     return DashboardMetricsResponse(
         date_filter=date_filter,
         start_date_iso=start_date.isoformat(),
@@ -252,4 +285,5 @@ def get_dashboard_metrics(
         top_selling_items=top_selling_items,
         recent_orders=recent_orders,
         payment_summary=payment_summary,
+        cash_summary=cash_summary,
     )

@@ -1,0 +1,107 @@
+# -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
+import os
+import sys
+
+backend_dir = Path(os.path.abspath(SPECPATH))
+
+datas = [
+    (str(backend_dir / "alembic.ini"), "."),
+    (str(backend_dir / "migrations"), "migrations"),
+]
+
+hidden_imports = [
+    "uvicorn",
+    "uvicorn.logging",
+    "uvicorn.loops",
+    "uvicorn.loops.auto",
+    "uvicorn.protocols",
+    "uvicorn.protocols.http",
+    "uvicorn.protocols.http.auto",
+    "uvicorn.protocols.websockets",
+    "uvicorn.protocols.websockets.auto",
+    "uvicorn.lifespans",
+    "uvicorn.lifespans.on",
+    "uvicorn.lifespans.off",
+    "fastapi",
+    "starlette",
+    "starlette.middleware.cors",
+    "starlette.staticfiles",
+    "pydantic",
+    "pydantic_settings",
+    "sqlalchemy",
+    "sqlalchemy.dialects.sqlite",
+    "alembic",
+    "alembic.runtime.environment",
+    "alembic.runtime.migration",
+    "reportlab",
+    "reportlab.lib",
+    "reportlab.platypus",
+    "reportlab.pdfgen",
+    "app",
+    "app.main",
+    "app.models",
+    "app.models.restaurant",
+    "app.models.menu",
+    "app.models.table",
+    "app.models.order",
+    "app.models.kot",
+    "app.models.billing",
+    "app.models.inventory",
+    "app.models.backup",
+    "app.models.cash",
+    "app.api.v1.router",
+    "app.api.v1.restaurant",
+    "app.api.v1.menu",
+    "app.api.v1.tables",
+    "app.api.v1.orders",
+    "app.api.v1.billing",
+    "app.api.v1.inventory",
+    "app.api.v1.reports",
+    "app.api.v1.backup",
+    "app.api.v1.cash",
+    "app.business_logic.tax_service",
+    "app.business_logic.settlement_service",
+    "app.business_logic.table_service",
+    "app.business_logic.inventory_service",
+    "app.business_logic.reports_service",
+    "app.business_logic.backup_service",
+    "app.business_logic.cash_service",
+    "app.business_logic.auto_backup_worker",
+    "app.printing.escpos_formatter",
+    "app.printing.print_manager",
+]
+
+a = Analysis(
+    [str(backend_dir / "run_desktop_backend.py")],
+    pathex=[str(backend_dir)],
+    binaries=[],
+    datas=datas,
+    hiddenimports=hidden_imports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=["tkinter", "pytest", "unittest"],
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name="aisrestroos-backend",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)

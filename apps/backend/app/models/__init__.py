@@ -26,6 +26,8 @@ from app.models.inventory import (
     RecipeIngredient,
     WastageRecord,
 )
+from app.models.backup import BackupRecord
+from app.models.cash import CashRegisterShift, CashTransaction, Expense
 
 __all__ = [
     "Base",
@@ -58,4 +60,8 @@ __all__ = [
     "Recipe",
     "RecipeIngredient",
     "WastageRecord",
+    "BackupRecord",
+    "CashRegisterShift",
+    "CashTransaction",
+    "Expense",
 ]

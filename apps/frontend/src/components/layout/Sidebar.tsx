@@ -7,6 +7,7 @@ import {
   ReceiptText,
   BookOpen,
   Grid3X3,
+  Banknote,
   Settings,
   Users,
   Boxes,
@@ -31,10 +32,11 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'orders', label: 'Orders & KOTs', icon: <ReceiptText className="h-5 w-5" /> },
   { id: 'menu', label: 'Menu Management', icon: <BookOpen className="h-5 w-5" /> },
   { id: 'tables', label: 'Table Management', icon: <Grid3X3 className="h-5 w-5" /> },
+  { id: 'cash', label: 'Cash Register', icon: <Banknote className="h-5 w-5" /> },
+  { id: 'inventory', label: 'Inventory', icon: <Boxes className="h-5 w-5" /> },
+  { id: 'reports', label: 'Reports & Analytics', icon: <BarChart3 className="h-5 w-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="h-5 w-5" /> },
   { id: 'customers', label: 'Customers', icon: <Users className="h-5 w-5" />, isPlaceholder: true },
-  { id: 'inventory', label: 'Inventory', icon: <Boxes className="h-5 w-5" />, isPlaceholder: true },
-  { id: 'reports', label: 'Reports & Analytics', icon: <BarChart3 className="h-5 w-5" />, isPlaceholder: true },
 ];
 
 export const Sidebar: React.FC<{ restaurant?: Restaurant | null }> = ({ restaurant }) => {

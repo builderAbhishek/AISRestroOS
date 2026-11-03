@@ -123,15 +123,25 @@ def process_order_settlement(
             f"INR {invoice.due_amount_paise / 100:.2f}."
         )
 
+    active_shift = None
+    try:
+        from app.business_logic.cash_service import get_active_shift, record_cash_sale
+        active_shift = get_active_shift(db, order.restaurant_id)
+    except Exception as e:
+        logger.warning(f"Cash register shift lookup notice: {e}")
+
     # Record each payment
     for p_in in payments_input:
         change_due = None
         if p_in.tendered_amount_paise is not None and p_in.tendered_amount_paise > p_in.amount_paise:
             change_due = p_in.tendered_amount_paise - p_in.amount_paise
 
+        shift_id = active_shift.id if (p_in.payment_method.lower() == "cash" and active_shift) else None
+
         payment = Payment(
             invoice_id=invoice.id,
             order_id=order.id,
+            shift_id=shift_id,
             payment_method=p_in.payment_method,
             amount_paise=p_in.amount_paise,
             tendered_amount_paise=p_in.tendered_amount_paise,
@@ -140,6 +150,17 @@ def process_order_settlement(
             notes=p_in.notes,
         )
         db.add(payment)
+        db.flush()
+
+        if p_in.payment_method.lower() == "cash" and active_shift:
+            record_cash_sale(
+                db=db,
+                shift=active_shift,
+                amount_paise=p_in.amount_paise,
+                order_id=order.id,
+                payment_id=payment.id,
+                notes=f"Order {order.order_code} cash settlement",
+            )
 
     new_total_paid = invoice.paid_amount_paise + total_new_payment_paise
     invoice.paid_amount_paise = new_total_paid
@@ -224,15 +245,36 @@ def process_refund(
             f"Refund amount (INR {amount_paise / 100:.2f}) cannot exceed total paid amount (INR {invoice.paid_amount_paise / 100:.2f})."
         )
 
+    active_shift = None
+    try:
+        from app.business_logic.cash_service import get_active_shift, record_cash_refund
+        active_shift = get_active_shift(db, order.restaurant_id)
+    except Exception as e:
+        logger.warning(f"Cash register shift lookup notice: {e}")
+
+    shift_id = active_shift.id if (payment_method.lower() == "cash" and active_shift) else None
+
     refund = Refund(
         invoice_id=invoice.id,
         order_id=order.id,
+        shift_id=shift_id,
         amount_paise=amount_paise,
         reason=reason.strip(),
         payment_method=payment_method,
         reference_number=reference_number,
     )
     db.add(refund)
+    db.flush()
+
+    if payment_method.lower() == "cash" and active_shift:
+        record_cash_refund(
+            db=db,
+            shift=active_shift,
+            amount_paise=amount_paise,
+            order_id=order.id,
+            refund_id=refund.id,
+            notes=f"Order {order.order_code} cash refund: {reason}",
+        )
 
     # Update invoice & order amounts
     invoice.paid_amount_paise -= amount_paise

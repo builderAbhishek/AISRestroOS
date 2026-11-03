@@ -48,6 +48,9 @@ class Payment(TimestampedUUIDModel):
     order_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    shift_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("cash_register_shifts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # Payment method: cash | upi | card | other
     payment_method: Mapped[str] = mapped_column(String(20), nullable=False)
     amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -67,6 +70,9 @@ class Refund(TimestampedUUIDModel):
     )
     order_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    shift_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("cash_register_shifts.id", ondelete="SET NULL"), nullable=True, index=True
     )
     amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(255), nullable=False)

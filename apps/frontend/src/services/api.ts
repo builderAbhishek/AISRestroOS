@@ -32,36 +32,58 @@ import {
   TaxReportData,
   InventoryAnalyticsData,
   ProfitabilityData,
+  BackupRecord,
+  BackupValidationResult,
+  CashRegisterShift,
+  CashTransaction,
+  Expense,
+  CashDashboardMetrics,
+  SystemInfo,
 } from '@/types';
 
-const BASE_URL = '/api/v1';
+const getBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+    return 'http://127.0.0.1:8000/api/v1';
+  }
+  return (import.meta as any).env?.VITE_API_BASE_URL || '/api/v1';
+};
+
+const BASE_URL = getBaseUrl();
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
-  const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  });
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      ...options,
+    });
 
-  if (!response.ok) {
-    let errorDetail = 'An unexpected error occurred';
-    try {
-      const errJson = await response.json();
-      errorDetail = errJson.error || errJson.detail || JSON.stringify(errJson);
-    } catch {
-      errorDetail = `Request failed with status ${response.status}: ${response.statusText}`;
+    if (!response.ok) {
+      let errorDetail = 'An unexpected error occurred';
+      try {
+        const errJson = await response.json();
+        errorDetail = errJson.error || errJson.detail || JSON.stringify(errJson);
+      } catch {
+        errorDetail = `Request failed with status ${response.status}: ${response.statusText}`;
+      }
+      console.error(`[API Error] ${options?.method || 'GET'} ${url} (${response.status}):`, errorDetail);
+      throw new Error(errorDetail);
     }
-    throw new Error(errorDetail);
-  }
 
-  if (response.status === 204) {
-    return {} as T;
-  }
+    if (response.status === 204) {
+      return {} as T;
+    }
 
-  return response.json();
+    return response.json();
+  } catch (err) {
+    if (err instanceof Error && !err.message.includes('status')) {
+      console.error(`[API Network Error] ${options?.method || 'GET'} ${url} failed to connect:`, err);
+    }
+    throw err;
+  }
 }
 
 export const restaurantApi = {
@@ -85,6 +107,31 @@ export const restaurantApi = {
     request<{ message: string }>('/restaurant/seed-sample-data', {
       method: 'POST',
     }),
+  uploadLogo: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = `${BASE_URL}/restaurant/logo`;
+    const res = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || err.detail || 'Failed to upload logo');
+    }
+    return res.json() as Promise<{ message: string; logo_url: string }>;
+  },
+  getSystemInfo: () => request<SystemInfo>('/restaurant/system-info'),
+  taxPreview: (params: { amount_paise: number; tax_rate_percent: number; tax_type?: string; is_tax_inclusive?: boolean; is_tax_enabled?: boolean }) => {
+    const q = new URLSearchParams({
+      amount_paise: String(params.amount_paise),
+      tax_rate_percent: String(params.tax_rate_percent),
+      tax_type: params.tax_type || 'CGST_SGST',
+      is_tax_inclusive: params.is_tax_inclusive ? 'true' : 'false',
+      is_tax_enabled: params.is_tax_enabled ? 'true' : 'false',
+    });
+    return request<any>(`/restaurant/tax-preview?${q.toString()}`, { method: 'POST' });
+  },
 };
 
 export const menuApi = {
@@ -411,4 +458,88 @@ export const reportsApi = {
     if (end) q.append('end_date', end);
     return `/api/v1/reports/export-csv?${q.toString()}`;
   },
+  getCashFlow: (rangeType: string = 'today', start?: string, end?: string) => {
+    const q = new URLSearchParams({ range_type: rangeType });
+    if (start) q.append('start_date', start);
+    if (end) q.append('end_date', end);
+    return request<any>(`/reports/cash-flow?${q.toString()}`);
+  },
+};
+
+export const backupApi = {
+  create: (destinationDir?: string) =>
+    request<BackupRecord>('/backup/create', {
+      method: 'POST',
+      body: JSON.stringify(destinationDir ? { destination_dir: destinationDir } : {}),
+    }),
+  validate: (backupFilePath: string) =>
+    request<BackupValidationResult>('/backup/validate', {
+      method: 'POST',
+      body: JSON.stringify({ backup_file_path: backupFilePath }),
+    }),
+  restore: (backupFilePath: string) =>
+    request<any>('/backup/restore', {
+      method: 'POST',
+      body: JSON.stringify({ backup_file_path: backupFilePath }),
+    }),
+  list: () => request<BackupRecord[]>('/backup/list'),
+  delete: (id: string) => request<{ message: string; success: boolean }>(`/backup/${id}`, { method: 'DELETE' }),
+  getDownloadUrl: (id: string) => `${BASE_URL}/backup/download/${id}`,
+  updateAutoConfig: (config: any) =>
+    request<any>('/backup/auto-config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+};
+
+export const cashApi = {
+  getActiveShift: () => request<CashRegisterShift | null>('/cash/shifts/active'),
+  openShift: (data: { opening_cash_paise: number; operator_name: string; opening_notes?: string }) =>
+    request<CashRegisterShift>('/cash/shifts/open', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  closeShift: (shiftId: string, data: { actual_closing_cash_paise: number; closing_notes?: string; closing_operator_name?: string }) =>
+    request<CashRegisterShift>(`/cash/shifts/${shiftId}/close`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  cashIn: (shiftId: string, data: { amount_paise: number; category?: string; notes?: string; operator_name?: string }) =>
+    request<CashTransaction>(`/cash/shifts/${shiftId}/cash-in`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  cashOut: (shiftId: string, data: { amount_paise: number; category?: string; notes?: string; operator_name?: string }) =>
+    request<CashTransaction>(`/cash/shifts/${shiftId}/cash-out`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listShifts: (limit: number = 50, offset: number = 0) =>
+    request<CashRegisterShift[]>(`/cash/shifts?limit=${limit}&offset=${offset}`),
+  getShiftDetail: (shiftId: string) =>
+    request<CashRegisterShift>(`/cash/shifts/${shiftId}`),
+  createExpense: (data: any) =>
+    request<Expense>('/cash/expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  listExpenses: (filters?: { start_date?: string; end_date?: string; category?: string; payment_method?: string }) => {
+    const q = new URLSearchParams();
+    if (filters?.start_date) q.append('start_date', filters.start_date);
+    if (filters?.end_date) q.append('end_date', filters.end_date);
+    if (filters?.category) q.append('category', filters.category);
+    if (filters?.payment_method) q.append('payment_method', filters.payment_method);
+    const qs = q.toString();
+    return request<Expense[]>(`/cash/expenses${qs ? `?${qs}` : ''}`);
+  },
+  getExpensesCsvUrl: (filters?: { start_date?: string; end_date?: string; category?: string; payment_method?: string }) => {
+    const q = new URLSearchParams();
+    if (filters?.start_date) q.append('start_date', filters.start_date);
+    if (filters?.end_date) q.append('end_date', filters.end_date);
+    if (filters?.category) q.append('category', filters.category);
+    if (filters?.payment_method) q.append('payment_method', filters.payment_method);
+    const qs = q.toString();
+    return `/api/v1/cash/expenses/export/csv${qs ? `?${qs}` : ''}`;
+  },
+  getMetrics: () => request<CashDashboardMetrics>('/cash/metrics'),
 };

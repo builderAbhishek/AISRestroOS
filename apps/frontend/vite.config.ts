@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const targetBackend = env.VITE_BACKEND_CONTAINER_URL || 'http://localhost:8000';
 
   return {
+    base: './',
     plugins: [react()],
     resolve: {
       alias: {

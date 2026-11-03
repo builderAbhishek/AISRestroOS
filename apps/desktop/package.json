@@ -1,13 +1,64 @@
 {
   "name": "aisrestroos-desktop",
-  "version": "1.0.0",
+  "productName": "AISRestroOS",
+  "version": "1.0.1",
   "private": true,
-  "description": "AISRestroOS — Offline Restaurant POS Desktop Shell",
+  "description": "AISRestroOS — Commercial Offline-First Restaurant POS & Management System",
+  "author": "AISRestroOS",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "electron .",
     "build:electron": "tsc -p tsconfig.json",
-    "package": "electron-builder"
+    "package:dir": "electron-builder --dir",
+    "package": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.aisrestroos.pos",
+    "productName": "AISRestroOS",
+    "directories": {
+      "output": "../../dist"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist-frontend/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AISRestroOS",
+      "artifactName": "AISRestroOS-Setup-${version}.${ext}",
+      "uninstallDisplayName": "AISRestroOS",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false
+    }
   },
   "devDependencies": {
     "electron": "^30.1.0",

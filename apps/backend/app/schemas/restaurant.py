@@ -16,6 +16,25 @@ class RestaurantSettingsBase(BaseModel):
     kot_prefix: str = Field(default="KOT-")
     bill_footer_text: str = Field(default="Thank you for dining with us! Please visit again.")
     auto_cut_paper: bool = True
+    receipt_printer_type: str = "thermal"
+    default_print_format: str = "80mm"
+
+    # Receipt customization
+    show_logo_on_receipt: bool = True
+    show_fssai_on_receipt: bool = True
+    show_gstin_on_receipt: bool = True
+    show_customer_info_on_receipt: bool = True
+    show_tax_breakdown_on_receipt: bool = True
+    receipt_header_note: Optional[str] = None
+
+    # Auto backup
+    auto_backup_enabled: bool = False
+    auto_backup_interval: str = "daily"
+    auto_backup_time: str = "23:00"
+    auto_backup_path: Optional[str] = None
+    backup_retention_count: int = 15
+    last_backup_at: Optional[str] = None
+    last_backup_status: Optional[str] = None
 
 
 class RestaurantSettingsUpdate(BaseModel):
@@ -28,6 +47,21 @@ class RestaurantSettingsUpdate(BaseModel):
     kot_prefix: Optional[str] = None
     bill_footer_text: Optional[str] = None
     auto_cut_paper: Optional[bool] = None
+    receipt_printer_type: Optional[str] = None
+    default_print_format: Optional[str] = None
+
+    show_logo_on_receipt: Optional[bool] = None
+    show_fssai_on_receipt: Optional[bool] = None
+    show_gstin_on_receipt: Optional[bool] = None
+    show_customer_info_on_receipt: Optional[bool] = None
+    show_tax_breakdown_on_receipt: Optional[bool] = None
+    receipt_header_note: Optional[str] = None
+
+    auto_backup_enabled: Optional[bool] = None
+    auto_backup_interval: Optional[str] = None
+    auto_backup_time: Optional[str] = None
+    auto_backup_path: Optional[str] = None
+    backup_retention_count: Optional[int] = None
 
 
 class RestaurantSettingsResponse(RestaurantSettingsBase):
@@ -52,6 +86,7 @@ class RestaurantSetupRequest(BaseModel):
     language: str = "en"
     gst_registered: bool = False
     gstin: Optional[str] = None
+    fssai_number: Optional[str] = None
 
     is_tax_enabled: bool = True
     is_tax_inclusive: bool = False
@@ -75,6 +110,7 @@ class RestaurantUpdateRequest(BaseModel):
     language: Optional[str] = None
     gst_registered: Optional[bool] = None
     gstin: Optional[str] = None
+    fssai_number: Optional[str] = None
 
 
 class RestaurantResponse(BaseModel):
@@ -91,6 +127,7 @@ class RestaurantResponse(BaseModel):
     language: str
     gst_registered: bool
     gstin: Optional[str]
+    fssai_number: Optional[str] = None
     settings: Optional[RestaurantSettingsResponse]
     created_at: datetime
     updated_at: datetime

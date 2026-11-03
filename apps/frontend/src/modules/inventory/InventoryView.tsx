@@ -169,18 +169,26 @@ export const InventoryView: React.FC = () => {
 
   // Mutations
   const createItemMutation = useMutation({
-    mutationFn: (data: any) =>
-      editingItem
-        ? inventoryApi.updateItem(editingItem.id, data)
-        : inventoryApi.createItem(data),
+    mutationFn: (data: any) => {
+      const sanitized = {
+        ...data,
+        category_id: data.category_id ? data.category_id : undefined,
+        supplier_id: data.supplier_id ? data.supplier_id : undefined,
+        sku: data.sku && typeof data.sku === 'string' && data.sku.trim() ? data.sku.trim() : undefined,
+      };
+      return editingItem
+        ? inventoryApi.updateItem(editingItem.id, sanitized)
+        : inventoryApi.createItem(sanitized);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryMovements'] });
       setShowItemModal(false);
       setEditingItem(null);
       notify(editingItem ? 'Item updated successfully' : 'Item added successfully', 'success');
     },
-    onError: (err: any) => notify(err.message, 'error'),
+    onError: (err: any) => notify(err.message || 'Failed to save inventory item', 'error'),
   });
 
   const createCategoryMutation = useMutation({
@@ -1337,10 +1345,10 @@ export const InventoryView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => createItemMutation.mutate(itemFormData)}
-                disabled={!itemFormData.name.trim()}
-                className="px-4 py-2 rounded-lg bg-[#F07818] hover:bg-[#D9670E] text-white text-xs font-semibold shadow-sm transition disabled:opacity-50"
+                disabled={!itemFormData.name.trim() || createItemMutation.isPending}
+                className="px-4 py-2 rounded-lg bg-[#F07818] hover:bg-[#D9670E] text-white text-xs font-semibold shadow-sm transition disabled:opacity-50 cursor-pointer"
               >
-                {editingItem ? 'Save Changes' : 'Create Item'}
+                {createItemMutation.isPending ? 'Saving...' : editingItem ? 'Save Changes' : 'Create Item'}
               </button>
             </div>
           </div>

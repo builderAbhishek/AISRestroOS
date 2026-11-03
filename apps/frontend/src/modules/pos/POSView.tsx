@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { menuApi, tablesApi, ordersApi, kotApi, restaurantApi } from '@/services/api';
 import { useCartStore } from '@/store/cartStore';
@@ -60,6 +61,74 @@ export const POSView: React.FC = () => {
   const [itemTypeFilter, setItemTypeFilter] = useState<'all' | 'veg' | 'non_veg' | 'egg'>('all');
   const [isTablePickerOpen, setIsTablePickerOpen] = useState(false);
   const [isSubmittingKOT, setIsSubmittingKOT] = useState(false);
+  const tableButtonRef = useRef<HTMLButtonElement>(null);
+  const tablePickerDropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const updateTablePickerPosition = () => {
+    if (!tableButtonRef.current) return;
+    const rect = tableButtonRef.current.getBoundingClientRect();
+    const dropdownWidth = 320;
+    const gap = 8;
+    let top = rect.bottom + gap;
+    let left = rect.left;
+
+    // Boundary check: ensure dropdown does not clip off right side of screen
+    if (left + dropdownWidth > window.innerWidth - 16) {
+      left = Math.max(16, window.innerWidth - dropdownWidth - 16);
+    }
+    if (left < 16) {
+      left = 16;
+    }
+
+    // Boundary check: if overflowing screen bottom, flip above button
+    const estimatedHeight = 280;
+    if (top + estimatedHeight > window.innerHeight - 16 && rect.top > estimatedHeight + gap) {
+      top = rect.top - estimatedHeight - gap;
+    }
+
+    setDropdownPosition({ top, left });
+  };
+
+  useEffect(() => {
+    if (!isTablePickerOpen) return;
+
+    updateTablePickerPosition();
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        tablePickerDropdownRef.current &&
+        !tablePickerDropdownRef.current.contains(target) &&
+        tableButtonRef.current &&
+        !tableButtonRef.current.contains(target)
+      ) {
+        setIsTablePickerOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsTablePickerOpen(false);
+      }
+    };
+
+    const handleReposition = () => {
+      updateTablePickerPosition();
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [isTablePickerOpen]);
 
   // 1. Restaurant Settings Query (to read active tax config)
   const { data: restaurant } = useQuery({
@@ -411,6 +480,7 @@ export const POSView: React.FC = () => {
             {orderType === 'dine_in' && (
               <div className="relative">
                 <button
+                  ref={tableButtonRef}
                   type="button"
                   onClick={() => setIsTablePickerOpen(!isTablePickerOpen)}
                   className="flex items-center gap-2 h-9 px-3 rounded-xl border border-[#F07818] bg-[#FFF0E3] text-[#C85A0A] font-bold text-xs shadow-2xs hover:bg-[#ffe4cc] transition-colors cursor-pointer"
@@ -419,14 +489,31 @@ export const POSView: React.FC = () => {
                   <span>
                     {selectedTableNumber ? `Table: ${selectedTableNumber}` : 'Select Table *'}
                   </span>
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isTablePickerOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {/* Table Picker Dropdown */}
-                {isTablePickerOpen && (
-                  <div className="absolute left-0 top-11 z-40 w-72 rounded-xl border border-[#E8EAF0] bg-white p-3 shadow-modal animate-in fade-in zoom-in-95">
-                    <p className="text-xs font-bold text-[#202124] mb-2">Select Restaurant Table</p>
-                    <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1">
+                {/* Table Picker Dropdown rendered via React Portal to break out of container overflow-hidden */}
+                {isTablePickerOpen && createPortal(
+                  <div
+                    ref={tablePickerDropdownRef}
+                    style={{
+                      position: 'fixed',
+                      top: `${dropdownPosition.top}px`,
+                      left: `${dropdownPosition.left}px`,
+                      zIndex: 99999,
+                    }}
+                    className="w-80 rounded-2xl border border-[#E8EAF0] bg-white p-3.5 shadow-2xl animate-in fade-in zoom-in-95 select-none"
+                  >
+                    <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-[#F0F2F5]">
+                      <div className="flex items-center gap-1.5">
+                        <Armchair className="h-4 w-4 text-[#F07818]" />
+                        <p className="text-xs font-bold text-[#202124]">Select Restaurant Table</p>
+                      </div>
+                      <span className="text-[10px] text-[#6B7280] font-medium">
+                        {tables.filter((t) => t.status === 'occupied').length} Occupied • {tables.filter((t) => t.status !== 'occupied').length} Free
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto p-1 scrollbar-thin">
                       {tables.map((t) => {
                         const isOccupied = t.status === 'occupied';
                         const isCurrent = t.id === selectedTableId;
@@ -435,24 +522,28 @@ export const POSView: React.FC = () => {
                           <button
                             key={t.id}
                             type="button"
-                            onClick={() => handleSelectTable(t)}
-                            className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                            onClick={() => {
+                              handleSelectTable(t);
+                              setIsTablePickerOpen(false);
+                            }}
+                            className={`flex flex-col items-center justify-center p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-xs ${
                               isCurrent
-                                ? 'border-[#F07818] bg-[#F07818] text-white'
+                                ? 'border-[#F07818] bg-[#F07818] text-white shadow-sm ring-2 ring-[#F07818]/30'
                                 : isOccupied
-                                ? 'border-[#F07818]/40 bg-[#FFF0E3] text-[#C85A0A]'
+                                ? 'border-[#F07818]/40 bg-[#FFF0E3] text-[#C85A0A] hover:bg-[#FFE4CC]'
                                 : 'border-[#E8EAF0] bg-[#FAFAFB] text-[#202124] hover:border-[#16865B] hover:bg-[#EBF7F2]'
                             }`}
                           >
-                            <span>{t.table_number}</span>
-                            <span className="text-[9px] font-normal opacity-80">
+                            <span className="text-sm font-black">{t.table_number}</span>
+                            <span className="text-[9px] font-semibold opacity-90 mt-0.5">
                               {isOccupied ? 'Occupied' : 'Free'}
                             </span>
                           </button>
                         );
                       })}
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             )}

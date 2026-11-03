@@ -1,32 +1,66 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '@/store/uiStore';
-import { kotApi } from '@/services/api';
+import { kotApi, restaurantApi } from '@/services/api';
+import { dispatchThermalPrint } from '@/services/printerService';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Printer, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, CheckCircle2 } from 'lucide-react';
 
 export const KOTPreviewModal: React.FC = () => {
   const { isKOTModalOpen, closeKOTModal, kotPrintResult, addToast } = useUIStore();
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const { data: restaurant } = useQuery({
+    queryKey: ['restaurant'],
+    queryFn: restaurantApi.getCurrent,
+  });
 
   if (!kotPrintResult) return null;
 
   const { kot, formatted_text, is_new_items_printed, message } = kotPrintResult;
 
   const handleReprint = async () => {
+    setIsPrinting(true);
     try {
+      // 1. Mark status on existing KOT in backend (idempotent, never duplicates KOT/order/stock)
       const res = await kotApi.reprintKOT(kot.id);
-      addToast({
-        type: 'success',
-        title: 'KOT Sent to Printer',
-        description: `KOT ${kot.kot_code} re-spooled to kitchen printer.`,
+      const textToPrint = res.formatted_text || formatted_text;
+
+      // 2. Dispatch to physical / system printer via Electron IPC or print dialog
+      const kotPrinter = restaurant?.settings?.kot_printer_name || undefined;
+      const paperWidth = restaurant?.settings?.paper_width_mm || 80;
+
+      const printResult = await dispatchThermalPrint({
+        rawText: textToPrint,
+        title: `KOT ${kot.kot_code}`,
+        printerName: kotPrinter,
+        widthMm: paperWidth,
+        forceDialog: !kotPrinter, // Open system print dialog if no designated KOT printer configured
       });
+
+      if (printResult.success) {
+        addToast({
+          type: 'success',
+          title: 'KOT Sent to Printer',
+          description: printResult.message || `KOT ${kot.kot_code} printed successfully.`,
+        });
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Print Error',
+          description: printResult.message || 'Could not reach kitchen printer. Check printer power & USB connection.',
+        });
+      }
     } catch (err: any) {
       addToast({
         type: 'error',
-        title: 'Print Error',
-        description: err.message || 'Could not reprint KOT.',
+        title: 'Reprint Failed',
+        description: err.message || 'Could not complete KOT reprint.',
       });
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -59,9 +93,16 @@ export const KOTPreviewModal: React.FC = () => {
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-[#E8EAF0]">
-          <Button type="button" onClick={handleReprint} variant="outline" size="sm" className="gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>Reprint KOT</span>
+          <Button
+            type="button"
+            onClick={handleReprint}
+            disabled={isPrinting}
+            variant="outline"
+            size="sm"
+            className="gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isPrinting ? 'animate-spin' : ''}`} />
+            <span>{isPrinting ? 'Printing...' : 'Reprint KOT'}</span>
           </Button>
           <Button type="button" onClick={closeKOTModal} variant="primary">
             Done

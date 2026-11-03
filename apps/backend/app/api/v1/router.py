@@ -18,6 +18,8 @@ from app.api.v1.billing import router as billing_router, printing_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.reports import router as reports_router
+from app.api.v1.backup import router as backup_router
+from app.api.v1.cash import router as cash_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 
@@ -76,3 +78,5 @@ api_v1_router.include_router(printing_router)
 api_v1_router.include_router(dashboard_router)
 api_v1_router.include_router(inventory_router)
 api_v1_router.include_router(reports_router)
+api_v1_router.include_router(backup_router)
+api_v1_router.include_router(cash_router)

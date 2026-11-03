@@ -18,9 +18,10 @@ const ROUTE_TITLES: Record<NavRoute, { title: string; subtitle: string }> = {
   menu: { title: 'Menu Management', subtitle: 'Categories, items, pricing & variants' },
   tables: { title: 'Table Layout & Management', subtitle: 'Real-time floor sections & seating' },
   settings: { title: 'Restaurant Settings', subtitle: 'Profile, GST taxation & thermal printer config' },
-  customers: { title: 'Customer Database', subtitle: 'Coming in Subscription Pro Phase' },
-  inventory: { title: 'Inventory & Stock Management', subtitle: 'Coming in Subscription Pro Phase' },
-  reports: { title: 'Financial & Tax Reports', subtitle: 'Coming in Subscription Pro Phase' },
+  cash: { title: 'Cash Register & Shifts', subtitle: 'Drawer reconciliation, cash in/out & daily expenses' },
+  customers: { title: 'Customer Database', subtitle: 'Customer history and contacts' },
+  inventory: { title: 'Inventory & Stock Management', subtitle: 'Ingredients, purchase orders, recipes & wastage' },
+  reports: { title: 'Financial & Tax Reports', subtitle: 'Sales analytics, tax reports and CSV exports' },
 };
 
 export const TopHeader: React.FC<{ restaurant?: Restaurant | null }> = ({ restaurant }) => {

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 # --- Category ---
@@ -75,6 +75,14 @@ class InventoryItemBase(BaseModel):
     is_active: bool = True
     notes: Optional[str] = None
 
+    @field_validator("sku", "category_id", "supplier_id", mode="before")
+    @classmethod
+    def sanitize_empty_strings(cls, v):
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            return v_stripped if v_stripped else None
+        return v
+
 
 class InventoryItemCreate(InventoryItemBase):
     pass
@@ -91,6 +99,14 @@ class InventoryItemUpdate(BaseModel):
     cost_per_unit_paise: Optional[int] = Field(None, ge=0)
     is_active: Optional[bool] = None
     notes: Optional[str] = None
+
+    @field_validator("sku", "category_id", "supplier_id", mode="before")
+    @classmethod
+    def sanitize_empty_strings(cls, v):
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            return v_stripped if v_stripped else None
+        return v
 
 
 class InventoryItemResponse(InventoryItemBase):

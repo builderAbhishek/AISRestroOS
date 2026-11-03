@@ -80,6 +80,16 @@ class PaymentSummaryItem(BaseModel):
         return self.total_paise / 100.0
 
 
+class ShiftDashboardSummary(BaseModel):
+    has_active_shift: bool = False
+    shift_number: Optional[int] = None
+    operator_name: Optional[str] = None
+    opening_cash_paise: int = 0
+    cash_sales_paise: int = 0
+    current_drawer_cash_paise: int = 0
+    today_cash_expenses_paise: int = 0
+
+
 class DashboardMetricsResponse(BaseModel):
     date_filter: str  # today | yesterday | 7days | 30days
     start_date_iso: str
@@ -91,3 +101,4 @@ class DashboardMetricsResponse(BaseModel):
     top_selling_items: List[TopSellingItem] = []
     recent_orders: List[RecentOrderSummary] = []
     payment_summary: List[PaymentSummaryItem] = []
+    cash_summary: Optional[ShiftDashboardSummary] = None

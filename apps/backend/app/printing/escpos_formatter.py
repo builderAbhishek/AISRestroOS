@@ -66,8 +66,17 @@ def format_customer_invoice(
         lines.append(restaurant.legal_name.center(width))
     lines.append(restaurant.address.center(width))
     lines.append(f"Phone: {restaurant.phone}".center(width))
-    if restaurant.gst_registered and restaurant.gstin:
+    
+    show_gstin = getattr(settings, 'show_gstin_on_receipt', True) if settings else True
+    if show_gstin and restaurant.gst_registered and restaurant.gstin:
         lines.append(f"GSTIN: {restaurant.gstin}".center(width))
+
+    show_fssai = getattr(settings, 'show_fssai_on_receipt', True) if settings else True
+    if show_fssai and getattr(restaurant, 'fssai_number', None):
+        lines.append(f"FSSAI Lic: {restaurant.fssai_number}".center(width))
+
+    if settings and getattr(settings, 'receipt_header_note', None):
+        lines.append(settings.receipt_header_note.center(width))
 
     lines.append(divider)
     lines.append("TAX INVOICE".center(width))
@@ -82,10 +91,12 @@ def format_customer_invoice(
     table_str = f"Table: {order.table_number_snapshot or 'N/A'}"
     lines.append(f"Type: {order_type_display}".ljust(half) + table_str.rjust(width - half))
 
-    if order.customer_name:
-        lines.append(f"Customer: {order.customer_name}")
-    if order.customer_phone:
-        lines.append(f"Phone: {order.customer_phone}")
+    show_customer = getattr(settings, 'show_customer_info_on_receipt', True) if settings else True
+    if show_customer:
+        if order.customer_name:
+            lines.append(f"Customer: {order.customer_name}")
+        if order.customer_phone:
+            lines.append(f"Phone: {order.customer_phone}")
 
     # Column headers
     lines.append(thin_divider)
@@ -146,12 +157,13 @@ def format_customer_invoice(
     is_inclusive = getattr(invoice, 'is_tax_inclusive', False)
     tax_label_suffix = " (Incl.)" if is_inclusive else ""
 
-    if (getattr(invoice, 'cgst_paise', 0) > 0 or getattr(invoice, 'sgst_paise', 0) > 0) and rate > 0:
+    show_breakdown = getattr(settings, 'show_tax_breakdown_on_receipt', True) if settings else True
+    if show_breakdown and (getattr(invoice, 'cgst_paise', 0) > 0 or getattr(invoice, 'sgst_paise', 0) > 0) and rate > 0:
         cgst_str = f"INR {(invoice.cgst_paise / 100):.2f}"
         sgst_str = f"INR {(invoice.sgst_paise / 100):.2f}"
         lines.append(f"CGST ({rate / 2:.1f}%){tax_label_suffix}:".ljust(lbl_w) + cgst_str.rjust(width - lbl_w))
         lines.append(f"SGST ({rate / 2:.1f}%){tax_label_suffix}:".ljust(lbl_w) + sgst_str.rjust(width - lbl_w))
-    elif getattr(invoice, 'igst_paise', 0) > 0 and rate > 0:
+    elif show_breakdown and getattr(invoice, 'igst_paise', 0) > 0 and rate > 0:
         igst_str = f"INR {(invoice.igst_paise / 100):.2f}"
         lines.append(f"IGST ({rate:.1f}%){tax_label_suffix}:".ljust(lbl_w) + igst_str.rjust(width - lbl_w))
     elif invoice.total_tax_paise > 0 and rate > 0:

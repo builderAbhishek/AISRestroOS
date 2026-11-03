@@ -145,6 +145,19 @@ def get_profitability_endpoint(
     return ProfitabilityResponse(**data)
 
 
+@router.get("/cash-flow")
+def get_cash_flow_report_endpoint(
+    range_type: str = Query("today"),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    restaurant: Restaurant = Depends(require_restaurant),
+    db: Session = Depends(get_db),
+):
+    from app.business_logic.report_service import get_cash_flow_report
+    start_dt, end_dt, _, _ = resolve_date_range(range_type, start_date, end_date)
+    return get_cash_flow_report(db, restaurant.id, start_dt, end_dt)
+
+
 @router.get("/export-csv")
 def export_report_csv(
     report_type: str = Query(..., description="sales, items, categories, taxes, inventory"),
@@ -224,6 +237,27 @@ def export_report_csv(
                 it.reorder_level,
                 f"{it.cost_per_unit_paise / 100:.2f}",
                 f"{val / 100:.2f}",
+            ])
+
+    elif report_type == "cash":
+        writer.writerow(["Shift #", "Operator", "Status", "Opened At", "Closed At", "Opening Cash (INR)", "Cash Sales (INR)", "Cash In (INR)", "Cash Out (INR)", "Cash Expenses (INR)", "Expected (INR)", "Actual (INR)", "Variance (INR)"])
+        from app.business_logic.report_service import get_cash_flow_report
+        cf = get_cash_flow_report(db, restaurant.id, start_dt, end_dt)
+        for s in cf["shifts"]:
+            writer.writerow([
+                s["shift_number"],
+                s["operator_name"],
+                s["status"].upper(),
+                s["opened_at"] or "-",
+                s["closed_at"] or "-",
+                f"{s['opening_cash_paise'] / 100:.2f}",
+                f"{s['cash_sales_paise'] / 100:.2f}",
+                f"{s['cash_in_paise'] / 100:.2f}",
+                f"{s['cash_out_paise'] / 100:.2f}",
+                f"{s['cash_expenses_paise'] / 100:.2f}",
+                f"{(s['expected_closing_cash_paise'] or 0) / 100:.2f}",
+                f"{(s['actual_closing_cash_paise'] or 0) / 100:.2f}",
+                f"{(s['variance_paise'] or 0) / 100:.2f}",
             ])
 
     filename = f"{restaurant.name}_{report_type}_report_{range_type}.csv".replace(" ", "_")

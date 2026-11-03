@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '@/store/uiStore';
-import { billingApi } from '@/services/api';
+import { billingApi, restaurantApi } from '@/services/api';
+import { dispatchThermalPrint } from '@/services/printerService';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Printer, ExternalLink, Copy, Check, FileText } from 'lucide-react';
@@ -11,6 +13,12 @@ export const CustomerReceiptModal: React.FC = () => {
   const [currentReceiptText, setCurrentReceiptText] = useState<string>('');
   const [isCopied, setIsCopied] = useState(false);
   const [isLoadingFormat, setIsLoadingFormat] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const { data: restaurant } = useQuery({
+    queryKey: ['restaurant'],
+    queryFn: restaurantApi.getCurrent,
+  });
 
   React.useEffect(() => {
     if (receiptModalData?.receiptText) {
@@ -37,57 +45,41 @@ export const CustomerReceiptModal: React.FC = () => {
     }
   };
 
-  const handlePrintThermal = () => {
-    // Open print window with thermal layout
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Receipt ${invoiceNumber}</title>
-          <style>
-            @page {
-              margin: 0;
-              size: ${selectedFormat === '58mm' ? '58mm' : '80mm'} auto;
-            }
-            body {
-              font-family: "Courier New", Courier, monospace;
-              font-size: ${selectedFormat === '58mm' ? '10px' : '12px'};
-              line-height: 1.25;
-              padding: 6px;
-              margin: 0;
-              color: black;
-              background: white;
-            }
-            pre {
-              margin: 0;
-              white-space: pre-wrap;
-              word-break: break-all;
-            }
-          </style>
-        </head>
-        <body>
-          <pre>${currentReceiptText}</pre>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-    } else {
-      window.print();
-    }
+  const handlePrintThermal = async () => {
+    setIsPrinting(true);
+    try {
+      const widthMm = selectedFormat === '58mm' ? 58 : 80;
+      const printerName = restaurant?.settings?.bill_printer_name || undefined;
+      const printResult = await dispatchThermalPrint({
+        rawText: currentReceiptText,
+        title: `Receipt ${invoiceNumber}`,
+        printerName,
+        widthMm,
+        forceDialog: !printerName,
+      });
 
-    addToast({
-      type: 'success',
-      title: 'Sent to Thermal Printer',
-      description: `Invoice ${invoiceNumber} (${selectedFormat}) dispatched.`,
-    });
+      if (printResult.success) {
+        addToast({
+          type: 'success',
+          title: 'Sent to Thermal Printer',
+          description: printResult.message || `Invoice ${invoiceNumber} (${selectedFormat}) dispatched.`,
+        });
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Print Notice',
+          description: printResult.message || 'Could not print customer receipt.',
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        type: 'error',
+        title: 'Print Error',
+        description: err.message || 'Thermal receipt print error.',
+      });
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleOpenA4Invoice = () => {
@@ -171,11 +163,12 @@ export const CustomerReceiptModal: React.FC = () => {
             <Button
               type="button"
               onClick={handlePrintThermal}
+              disabled={isPrinting}
               variant="primary"
               className="gap-2 text-xs font-bold"
             >
               <Printer className="h-4 w-4" />
-              <span>Print {selectedFormat} Thermal</span>
+              <span>{isPrinting ? 'Printing...' : `Print ${selectedFormat} Thermal`}</span>
             </Button>
 
             {orderId && (

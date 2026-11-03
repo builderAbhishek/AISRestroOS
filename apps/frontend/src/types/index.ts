@@ -22,6 +22,19 @@ export interface RestaurantSettings {
   kot_prefix: string;
   bill_footer_text: string;
   auto_cut_paper: boolean;
+  show_logo_on_receipt?: boolean;
+  show_fssai_on_receipt?: boolean;
+  show_gstin_on_receipt?: boolean;
+  show_customer_info_on_receipt?: boolean;
+  show_tax_breakdown_on_receipt?: boolean;
+  receipt_header_note?: string;
+  auto_backup_enabled?: boolean;
+  auto_backup_interval?: string;
+  auto_backup_time?: string;
+  auto_backup_path?: string;
+  backup_retention_count?: number;
+  last_backup_at?: string;
+  last_backup_status?: string;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +53,7 @@ export interface Restaurant {
   language: string;
   gst_registered: boolean;
   gstin?: string;
+  fssai_number?: string;
   settings?: RestaurantSettings;
   created_at: string;
   updated_at: string;
@@ -403,6 +417,16 @@ export interface PaymentSummaryItem {
   total_inr: number;
 }
 
+export interface ShiftDashboardSummary {
+  has_active_shift: boolean;
+  shift_number?: number;
+  operator_name?: string;
+  opening_cash_paise: number;
+  cash_sales_paise: number;
+  current_drawer_cash_paise: number;
+  today_cash_expenses_paise: number;
+}
+
 export interface DashboardMetrics {
   date_filter: string;
   start_date_iso: string;
@@ -414,6 +438,7 @@ export interface DashboardMetrics {
   top_selling_items: TopSellingItem[];
   recent_orders: RecentOrderSummary[];
   payment_summary: PaymentSummaryItem[];
+  cash_summary?: ShiftDashboardSummary;
 }
 
 // --- INVENTORY TYPES ---
@@ -678,4 +703,125 @@ export interface ProfitabilityData {
   gross_margin_pct: number;
   recipe_coverage_pct: number;
   disclaimer: string;
+}
+
+// Backup & Restore types
+export interface BackupRecord {
+  id: string;
+  filename: string;
+  file_path: string;
+  file_size_bytes: number;
+  backup_type: string;
+  status: string;
+  duration_ms: number;
+  version: string;
+  tables_count: number;
+  records_count: number;
+  error_message?: string | null;
+  created_at: string;
+  file_exists: boolean;
+}
+
+export interface BackupValidationResult {
+  valid: boolean;
+  metadata: {
+    app_name: string;
+    app_version: string;
+    created_at: string;
+    restaurant_name: string;
+    tables_count: number;
+    records_count: number;
+    sha256?: string;
+  };
+  tables_count: number;
+  records_count: number;
+  integrity: string;
+  file_size_bytes: number;
+}
+
+// Cash Management types
+export interface CashTransaction {
+  id: string;
+  shift_id: string;
+  transaction_type: 'CASH_IN' | 'CASH_OUT' | 'CASH_SALE' | 'CASH_REFUND' | 'CASH_EXPENSE' | 'CASH_CORRECTION';
+  amount_paise: number;
+  balance_after_paise: number;
+  category?: string | null;
+  notes?: string | null;
+  operator_name: string;
+  reference_id?: string | null;
+  created_at: string;
+}
+
+export interface Expense {
+  id: string;
+  shift_id?: string | null;
+  category: string;
+  amount_paise: number;
+  payment_method: 'cash' | 'upi' | 'card' | 'other';
+  description: string;
+  recipient?: string | null;
+  reference_number?: string | null;
+  notes?: string | null;
+  expense_date: string;
+  created_at: string;
+}
+
+export interface CashRegisterShift {
+  id: string;
+  shift_number: number;
+  operator_name: string;
+  status: 'open' | 'closed';
+  opened_at: string;
+  closed_at?: string | null;
+  opening_cash_paise: number;
+  opening_notes?: string | null;
+  cash_sales_paise: number;
+  cash_in_paise: number;
+  cash_out_paise: number;
+  cash_expenses_paise: number;
+  cash_refunds_paise: number;
+  current_expected_cash_paise: number;
+  expected_closing_cash_paise?: number | null;
+  actual_closing_cash_paise?: number | null;
+  variance_paise?: number | null;
+  closing_notes?: string | null;
+  closing_operator_name?: string | null;
+  transactions?: CashTransaction[];
+  expenses?: Expense[];
+}
+
+export interface CashDashboardMetrics {
+  has_active_shift: boolean;
+  active_shift?: CashRegisterShift | null;
+  today_cash_sales_paise: number;
+  today_cash_expenses_paise: number;
+  current_drawer_cash_paise: number;
+}
+
+export interface SystemInfo {
+  app_name: string;
+  app_version: string;
+  environment: string;
+  database_engine: string;
+  database_file_path: string;
+  database_size_bytes: number;
+  database_size_display: string;
+  backup_directory: string;
+  total_orders: number;
+  total_menu_items: number;
+  total_shifts: number;
+}
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      getAppPaths: () => Promise<any>;
+      getPrinters: () => Promise<Array<{ name: string; isDefault: boolean }>>;
+      printHtml: (data: { html: string; printerName?: string; silent?: boolean; widthMm?: number }) => Promise<{ success: boolean; failureReason?: string }>;
+      testPrint: (data: { printerName?: string; format?: string }) => Promise<{ success: boolean; failureReason?: string }>;
+      platform?: string;
+      isElectron?: boolean;
+    };
+  }
 }

@@ -181,6 +181,40 @@ export const DashboardView: React.FC = () => {
         </Card>
       </div>
 
+      {/* Cash Drawer & Shift Status Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-white border border-[#E8EAF0] shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-[#FFF0E3] text-[#F07818] shrink-0">
+            <Banknote className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#202124]">
+                Cash Register Till:
+              </span>
+              <Badge variant={data.cash_summary?.has_active_shift ? 'success' : 'neutral'} size="sm">
+                {data.cash_summary?.has_active_shift
+                  ? `Shift #${data.cash_summary.shift_number} Open (${data.cash_summary.operator_name})`
+                  : 'Register Closed'}
+              </Badge>
+            </div>
+            <span className="text-xs text-[#6B7280]">
+              Expected Till Cash: <strong>{formatINR(data.cash_summary?.current_drawer_cash_paise || 0)}</strong> | Cash Sales: <strong>{formatINR(data.cash_summary?.cash_sales_paise || 0)}</strong> | Cash Expenses: <strong>{formatINR(data.cash_summary?.today_cash_expenses_paise || 0)}</strong>
+            </span>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentRoute('cash')}
+          className="text-xs self-start sm:self-auto text-[#F07818] border-[#F07818]/30 hover:bg-[#FFF0E3]"
+        >
+          Manage Cash Register &rarr;
+        </Button>
+      </div>
+
       {isZeroOrders ? (
         <EmptyState
           icon={<Flame className="h-8 w-8 text-[#F07818]" />}

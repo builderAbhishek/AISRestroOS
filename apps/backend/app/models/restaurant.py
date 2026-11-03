@@ -19,6 +19,7 @@ class Restaurant(TimestampedUUIDModel):
     language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)
     gst_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     gstin: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    fssai_number: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
 
     # Relationships
     settings: Mapped[Optional["RestaurantSettings"]] = relationship(
@@ -62,5 +63,22 @@ class RestaurantSettings(TimestampedUUIDModel):
     auto_cut_paper: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     receipt_printer_type: Mapped[str] = mapped_column(String(30), default="thermal", nullable=False)
     default_print_format: Mapped[str] = mapped_column(String(20), default="80mm", nullable=False)
+
+    # Receipt Customization
+    show_logo_on_receipt: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_fssai_on_receipt: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_gstin_on_receipt: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_customer_info_on_receipt: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_tax_breakdown_on_receipt: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    receipt_header_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Automated Backup Settings
+    auto_backup_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    auto_backup_interval: Mapped[str] = mapped_column(String(20), default="daily", nullable=False)
+    auto_backup_time: Mapped[str] = mapped_column(String(10), default="23:00", nullable=False)
+    auto_backup_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    backup_retention_count: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    last_backup_at: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    last_backup_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="settings")

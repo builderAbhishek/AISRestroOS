@@ -1,6 +1,11 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, status
+import os
+import time
+import shutil
+from pathlib import Path
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, Depends, status, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.api.deps import get_db, get_current_restaurant, require_restaurant
 from app.models.restaurant import Restaurant, RestaurantSettings
 from app.models.tax import TaxConfiguration
@@ -370,3 +375,85 @@ def trigger_seed_sample_data(
 ):
     seed_sample_menu_and_tables(db, restaurant)
     return {"message": "Sample categories, items, and tables loaded successfully."}
+
+
+@router.post("/logo")
+def upload_restaurant_logo(
+    file: UploadFile = File(...),
+    restaurant: Restaurant = Depends(require_restaurant),
+    db: Session = Depends(get_db),
+):
+    """Uploads and stores the restaurant logo in the persistent local data directory."""
+    if not file.content_type.startswith("image/"):
+        raise AISRestroException("Invalid file format. Please upload an image (PNG, JPG, WEBP, SVG).")
+
+    uploads_dir = Path("/app/data/uploads") if os.path.exists("/app/data") else Path(__file__).resolve().parents[4] / "data" / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "png"
+    target_filename = f"logo_{restaurant.id[:8]}_{int(time.time())}.{ext}"
+    target_path = uploads_dir / target_filename
+
+    with open(target_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    logo_url = f"/uploads/{target_filename}"
+    restaurant.logo_url = logo_url
+    db.commit()
+    db.refresh(restaurant)
+
+    return {"message": "Logo uploaded successfully.", "logo_url": logo_url}
+
+
+@router.post("/tax-preview")
+def calculate_tax_preview(
+    amount_paise: int = 10000,
+    tax_rate_percent: float = 5.0,
+    tax_type: str = "CGST_SGST",
+    is_tax_inclusive: bool = False,
+    is_tax_enabled: bool = True,
+):
+    """Calculates preview tax breakdown without persisting changes."""
+    from app.business_logic.tax_service import calculate_tax_breakdown
+    breakdown = calculate_tax_breakdown(
+        net_amount_paise=amount_paise,
+        tax_rate_percent=tax_rate_percent,
+        tax_type=tax_type,
+        is_tax_inclusive=is_tax_inclusive,
+        is_tax_enabled=is_tax_enabled,
+    )
+    return breakdown
+
+
+@router.get("/system-info")
+def get_system_information(
+    restaurant: Restaurant = Depends(require_restaurant),
+    db: Session = Depends(get_db),
+):
+    """Returns local system info, database path, storage sizes, and record stats."""
+    from app.core.config import settings
+    from app.business_logic.backup_service import get_sqlite_db_path, get_default_backup_dir
+    from app.models.order import Order
+    from app.models.cash import CashRegisterShift
+
+    db_path = get_sqlite_db_path()
+    db_size = db_path.stat().st_size if db_path.exists() else 0
+    backup_dir = get_default_backup_dir()
+
+    total_orders = db.query(func.count(Order.id)).scalar() or 0
+    total_items = db.query(func.count(MenuItem.id)).scalar() or 0
+    total_shifts = db.query(func.count(CashRegisterShift.id)).scalar() or 0
+
+    return {
+        "app_name": settings.APP_NAME,
+        "app_version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT,
+        "database_engine": "SQLite",
+        "database_file_path": str(db_path),
+        "database_size_bytes": db_size,
+        "database_size_display": f"{db_size / (1024 * 1024):.2f} MB" if db_size > 1024 * 1024 else f"{db_size / 1024:.1f} KB",
+        "backup_directory": str(backup_dir),
+        "total_orders": total_orders,
+        "total_menu_items": total_items,
+        "total_shifts": total_shifts,
+    }

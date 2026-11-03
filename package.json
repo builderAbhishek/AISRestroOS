@@ -1,6 +1,6 @@
 {
   "name": "aisrestroos-monorepo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "workspaces": [
     "apps/frontend",
@@ -9,6 +9,9 @@
   "scripts": {
     "dev:frontend": "npm --prefix apps/frontend run dev",
     "build:frontend": "npm --prefix apps/frontend run build",
+    "build:backend": "pyinstaller apps/backend/aisrestroos-backend.spec --distpath apps/desktop/resources/backend --workpath apps/backend/build -y",
+    "build:desktop": "npm --prefix apps/desktop run build:electron",
+    "build:installer": "npm --prefix apps/desktop run package",
     "test:frontend": "npm --prefix apps/frontend run test",
     "test:backend": "python -m pytest apps/backend/tests -v",
     "test": "npm run test:backend && npm run test:frontend",

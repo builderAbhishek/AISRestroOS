@@ -656,3 +656,82 @@ def get_profitability_report(
             "Fixed operational overheads (rent, salaries, electricity) are not deducted."
         ),
     }
+
+
+def get_cash_flow_report(
+    db: Session,
+    restaurant_id: str,
+    start_dt: datetime,
+    end_dt: datetime,
+) -> Dict[str, Any]:
+    """Generates shift-wise and aggregated cash flow report."""
+    from app.models.cash import CashRegisterShift, Expense
+
+    shifts = (
+        db.query(CashRegisterShift)
+        .filter(
+            CashRegisterShift.restaurant_id == restaurant_id,
+            CashRegisterShift.opened_at >= start_dt,
+            CashRegisterShift.opened_at <= end_dt,
+        )
+        .order_by(CashRegisterShift.opened_at.desc())
+        .all()
+    )
+
+    expenses = (
+        db.query(Expense)
+        .filter(
+            Expense.restaurant_id == restaurant_id,
+            Expense.expense_date >= start_dt,
+            Expense.expense_date <= end_dt,
+        )
+        .all()
+    )
+
+    total_opening_paise = sum(s.opening_cash_paise for s in shifts)
+    total_cash_sales_paise = sum(s.cash_sales_paise for s in shifts)
+    total_cash_in_paise = sum(s.cash_in_paise for s in shifts)
+    total_cash_out_paise = sum(s.cash_out_paise for s in shifts)
+    total_cash_exp_paise = sum(s.cash_expenses_paise for s in shifts)
+    total_cash_refunds_paise = sum(s.cash_refunds_paise for s in shifts)
+    total_variance_paise = sum(s.variance_paise or 0 for s in shifts if s.status == "closed")
+
+    shift_items = []
+    for s in shifts:
+        shift_items.append({
+            "id": s.id,
+            "shift_number": s.shift_number,
+            "operator_name": s.operator_name,
+            "status": s.status,
+            "opened_at": s.opened_at.isoformat() if s.opened_at else None,
+            "closed_at": s.closed_at.isoformat() if s.closed_at else None,
+            "opening_cash_paise": s.opening_cash_paise,
+            "cash_sales_paise": s.cash_sales_paise,
+            "cash_in_paise": s.cash_in_paise,
+            "cash_out_paise": s.cash_out_paise,
+            "cash_expenses_paise": s.cash_expenses_paise,
+            "expected_closing_cash_paise": s.expected_closing_cash_paise,
+            "actual_closing_cash_paise": s.actual_closing_cash_paise,
+            "variance_paise": s.variance_paise,
+            "closing_notes": s.closing_notes,
+        })
+
+    # Total expenses across all payment methods
+    expenses_total_paise = sum(e.amount_paise for e in expenses)
+    cash_expenses_total_paise = sum(e.amount_paise for e in expenses if e.payment_method == "cash")
+    online_expenses_total_paise = expenses_total_paise - cash_expenses_total_paise
+
+    return {
+        "shifts_count": len(shifts),
+        "total_opening_paise": total_opening_paise,
+        "total_cash_sales_paise": total_cash_sales_paise,
+        "total_cash_in_paise": total_cash_in_paise,
+        "total_cash_out_paise": total_cash_out_paise,
+        "total_cash_expenses_paise": total_cash_exp_paise,
+        "total_cash_refunds_paise": total_cash_refunds_paise,
+        "total_variance_paise": total_variance_paise,
+        "expenses_total_paise": expenses_total_paise,
+        "cash_expenses_total_paise": cash_expenses_total_paise,
+        "online_expenses_total_paise": online_expenses_total_paise,
+        "shifts": shift_items,
+    }

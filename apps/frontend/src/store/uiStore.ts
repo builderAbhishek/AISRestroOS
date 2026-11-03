@@ -7,6 +7,7 @@ export type NavRoute =
   | 'orders'
   | 'menu'
   | 'tables'
+  | 'cash'
   | 'settings'
   | 'customers'
   | 'inventory'
@@ -69,7 +70,7 @@ function parseHash(): { route: NavRoute; params: RouteParams } {
     if (!hash) return { route: 'dashboard', params: {} };
     const [rawRoute, rawQuery] = hash.split('?');
     const validRoutes: NavRoute[] = [
-      'dashboard', 'pos', 'orders', 'menu', 'tables', 'settings', 'customers', 'inventory', 'reports'
+      'dashboard', 'pos', 'orders', 'menu', 'tables', 'cash', 'settings', 'customers', 'inventory', 'reports'
     ];
     const route = validRoutes.includes(rawRoute as NavRoute) ? (rawRoute as NavRoute) : 'dashboard';
     const params: RouteParams = {};
@@ -143,6 +144,13 @@ export const useUIStore = create<UIState>((set) => ({
     set({ isReceiptModalOpen: false, receiptModalData: null }),
 
   addToast: (toast) => {
+    // Avoid duplicate toast spam for identical active notifications
+    const existing = useUIStore.getState().toasts.find(
+      (t) => t.title === toast.title && t.type === toast.type && t.description === toast.description
+    );
+    if (existing) {
+      return;
+    }
     const id = Math.random().toString(36).substring(2, 9);
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
     const duration = toast.duration || 4000;
