@@ -84,6 +84,15 @@ class VariantResponse(VariantCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CategoryReorderItem(BaseModel):
+    id: str
+    sort_order: int
+
+
+class CategoryReorderRequest(BaseModel):
+    items: List[CategoryReorderItem]
+
+
 class MenuItemCreate(BaseModel):
     category_id: str
     name: str = Field(..., min_length=1, max_length=120)
@@ -91,7 +100,13 @@ class MenuItemCreate(BaseModel):
     description: Optional[str] = None
     base_price_paise: int = Field(..., ge=0)
     is_veg: bool = True
+    item_type: str = Field(default="veg", pattern="^(veg|non_veg|egg)$")
     is_available: bool = True
+    is_recommended: bool = False
+    is_bestseller: bool = False
+    is_tax_inclusive: Optional[bool] = None
+    tax_rate_override_percent: Optional[float] = None
+    preparation_time_minutes: Optional[int] = None
     has_variants: bool = False
     image_url: Optional[str] = None
     sort_order: int = 0
@@ -106,10 +121,18 @@ class MenuItemUpdate(BaseModel):
     description: Optional[str] = None
     base_price_paise: Optional[int] = None
     is_veg: Optional[bool] = None
+    item_type: Optional[str] = None
     is_available: Optional[bool] = None
+    is_recommended: Optional[bool] = None
+    is_bestseller: Optional[bool] = None
+    is_tax_inclusive: Optional[bool] = None
+    tax_rate_override_percent: Optional[float] = None
+    preparation_time_minutes: Optional[int] = None
     has_variants: Optional[bool] = None
     image_url: Optional[str] = None
     sort_order: Optional[int] = None
+    variants: Optional[List[VariantCreate]] = None
+    addon_group_ids: Optional[List[str]] = None
 
 
 class MenuItemResponse(BaseModel):
@@ -121,7 +144,13 @@ class MenuItemResponse(BaseModel):
     description: Optional[str]
     base_price_paise: int
     is_veg: bool
+    item_type: str = "veg"
     is_available: bool
+    is_recommended: bool = False
+    is_bestseller: bool = False
+    is_tax_inclusive: Optional[bool] = None
+    tax_rate_override_percent: Optional[float] = None
+    preparation_time_minutes: Optional[int] = None
     has_variants: bool
     image_url: Optional[str]
     sort_order: int

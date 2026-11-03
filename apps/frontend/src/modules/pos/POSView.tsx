@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { menuApi, tablesApi, ordersApi, kotApi } from '@/services/api';
+import { menuApi, tablesApi, ordersApi, kotApi, restaurantApi } from '@/services/api';
 import { useCartStore } from '@/store/cartStore';
 import { useUIStore } from '@/store/uiStore';
 import { formatINR } from '@/lib/utils';
@@ -19,12 +19,9 @@ import {
   Trash2,
   Printer,
   Receipt,
-  Edit2,
-  Sparkles,
   ChevronDown,
-  Layers,
-  CircleDot,
   Armchair,
+  Sparkles,
 } from 'lucide-react';
 
 export const POSView: React.FC = () => {
@@ -41,7 +38,6 @@ export const POSView: React.FC = () => {
     addItem,
     updateQuantity,
     removeItem,
-    updateNotes,
     clearCart,
     loadExistingOrder,
     getSubtotalPaise,
@@ -52,6 +48,7 @@ export const POSView: React.FC = () => {
   } = useCartStore();
 
   const {
+    routeParams,
     openVariantModal,
     openKOTModal,
     openSettlementModal,
@@ -60,26 +57,57 @@ export const POSView: React.FC = () => {
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [vegFilter, setVegFilter] = useState<'all' | 'veg' | 'non_veg'>('all');
+  const [itemTypeFilter, setItemTypeFilter] = useState<'all' | 'veg' | 'non_veg' | 'egg'>('all');
   const [isTablePickerOpen, setIsTablePickerOpen] = useState(false);
   const [isSubmittingKOT, setIsSubmittingKOT] = useState(false);
 
-  // Queries
+  // 1. Restaurant Settings Query (to read active tax config)
+  const { data: restaurant } = useQuery({
+    queryKey: ['restaurant'],
+    queryFn: restaurantApi.getCurrent,
+  });
+
+  const isTaxEnabled = restaurant?.settings?.is_tax_enabled ?? true;
+  const isTaxInclusive = restaurant?.settings?.is_tax_inclusive ?? false;
+  const taxRate = isTaxEnabled ? (restaurant?.settings?.tax_rate_percent ?? 0.0) : 0.0;
+  const taxType = restaurant?.settings?.tax_type || 'CGST_SGST';
+
+  // 2. Categories Query
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: menuApi.listCategories,
   });
 
+  // 3. Isolated POS Menu Items Query
   const { data: menuItems = [], isLoading: isMenuLoading } = useQuery({
-    queryKey: ['menu-items'],
+    queryKey: ['pos-menu-items'],
     queryFn: () => menuApi.listItems({ available_only: true }),
   });
 
+  // 4. Tables Query
   const { data: tables = [] } = useQuery({
     queryKey: ['tables'],
     queryFn: () => tablesApi.listTables(),
     refetchInterval: 5000,
   });
+
+  // Automatically resume active order or table from route parameters on mount
+  useEffect(() => {
+    if (routeParams.orderId && routeParams.orderId !== activeOrderId) {
+      ordersApi.getOrder(routeParams.orderId).then((ord) => {
+        loadExistingOrder(ord, menuItems);
+      }).catch(console.error);
+    } else if (routeParams.tableId && !selectedTableId) {
+      tablesApi.getActiveOrder(routeParams.tableId).then((ord) => {
+        if (ord) {
+          loadExistingOrder(ord, menuItems);
+        } else {
+          const t = tables.find((x) => x.id === routeParams.tableId);
+          if (t) setTable(t.id, t.table_number);
+        }
+      }).catch(console.error);
+    }
+  }, [routeParams.orderId, routeParams.tableId, menuItems, tables, activeOrderId, selectedTableId]);
 
   // Filter menu items
   const filteredItems = useMemo(() => {
@@ -87,8 +115,10 @@ export const POSView: React.FC = () => {
       if (selectedCategoryId !== 'all' && item.category_id !== selectedCategoryId) {
         return false;
       }
-      if (vegFilter === 'veg' && !item.is_veg) return false;
-      if (vegFilter === 'non_veg' && item.is_veg) return false;
+      if (itemTypeFilter !== 'all') {
+        const effectiveType = item.item_type || (item.is_veg ? 'veg' : 'non_veg');
+        if (effectiveType !== itemTypeFilter) return false;
+      }
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         const matchesName = item.name.toLowerCase().includes(term);
@@ -97,7 +127,7 @@ export const POSView: React.FC = () => {
       }
       return true;
     });
-  }, [menuItems, selectedCategoryId, vegFilter, searchTerm]);
+  }, [menuItems, selectedCategoryId, itemTypeFilter, searchTerm]);
 
   // Handle Item Click: If has variants or addons, open modal, else add directly
   const handleItemClick = (item: MenuItem) => {
@@ -112,16 +142,24 @@ export const POSView: React.FC = () => {
   const handleSelectTable = async (table: RestaurantTable) => {
     setIsTablePickerOpen(false);
 
-    if (table.status === 'occupied' && table.current_order_id) {
-      // Load active order on table
+    if (table.status === 'occupied') {
       try {
-        const existingOrder = await ordersApi.getOrder(table.current_order_id);
-        loadExistingOrder(existingOrder, menuItems);
-        addToast({
-          type: 'info',
-          title: `Resumed Table ${table.table_number}`,
-          description: `Loaded active order ${existingOrder.order_code}. New items will append to this order.`,
-        });
+        let existingOrder: any = null;
+        if (table.current_order_id) {
+          existingOrder = await ordersApi.getOrder(table.current_order_id);
+        } else {
+          existingOrder = await tablesApi.getActiveOrder(table.id);
+        }
+
+        if (existingOrder) {
+          loadExistingOrder(existingOrder, menuItems);
+          addToast({
+            type: 'info',
+            title: `Resumed Table ${table.table_number}`,
+            description: `Loaded active order ${existingOrder.order_code}. New items will append to this order.`,
+          });
+          return;
+        }
       } catch (err: any) {
         addToast({
           type: 'error',
@@ -129,9 +167,8 @@ export const POSView: React.FC = () => {
           description: err.message,
         });
       }
-    } else {
-      setTable(table.id, table.table_number);
     }
+    setTable(table.id, table.table_number);
   };
 
   // STEP 3: "Add & Print KOT"
@@ -140,7 +177,7 @@ export const POSView: React.FC = () => {
       addToast({
         type: 'warning',
         title: 'Empty Cart',
-        description: 'Please add items to the cart before generating KOT.',
+        description: 'Please add at least one item before printing KOT.',
       });
       return;
     }
@@ -160,7 +197,7 @@ export const POSView: React.FC = () => {
       let orderId = activeOrderId;
 
       if (!orderId) {
-        // Create new order on backend
+        // Save initial active order
         const createPayload = {
           order_type: orderType,
           table_id: selectedTableId,
@@ -168,7 +205,6 @@ export const POSView: React.FC = () => {
           discount_value: useCartStore.getState().discountValue,
           customer_name: useCartStore.getState().customerName || undefined,
           customer_phone: useCartStore.getState().customerPhone || undefined,
-          notes: useCartStore.getState().orderNotes || undefined,
           items: cartItems.map((ci) => ({
             menu_item_id: ci.menuItem.id,
             variant_id: ci.variant?.id,
@@ -186,11 +222,8 @@ export const POSView: React.FC = () => {
         orderId = newOrder.id;
         loadExistingOrder(newOrder, menuItems);
       } else {
-        // Append / update existing order on backend
+        // Update order with current cart items
         const updatePayload = {
-          discount_type: useCartStore.getState().discountType,
-          discount_value: useCartStore.getState().discountValue,
-          notes: useCartStore.getState().orderNotes || undefined,
           items: cartItems.map((ci) => ({
             menu_item_id: ci.menuItem.id,
             variant_id: ci.variant?.id,
@@ -207,18 +240,33 @@ export const POSView: React.FC = () => {
         loadExistingOrder(updatedOrder, menuItems);
       }
 
-      // Generate incremental KOT
-      const kotResult = await kotApi.addAndPrintKOT(orderId);
-      openKOTModal(kotResult);
+      // Generate & Print KOT
+      const printResult = await kotApi.generateKOT(orderId);
+      openKOTModal(printResult);
 
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      if (printResult.is_new_items_printed) {
+        addToast({
+          type: 'success',
+          title: `KOT ${printResult.kot.kot_code} Sent`,
+          description: `${printResult.kot.items.length} items sent to kitchen thermal printer.`,
+        });
+      } else {
+        addToast({
+          type: 'info',
+          title: 'All Items Already Printed',
+          description: 'No new items detected. Kitchen already has this order ticket.',
+        });
+      }
+
+      // Refresh order to update printed_quantity flags
+      const refreshedOrder = await ordersApi.getOrder(orderId);
+      loadExistingOrder(refreshedOrder, menuItems);
       queryClient.invalidateQueries({ queryKey: ['tables'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
     } catch (err: any) {
       addToast({
         type: 'error',
-        title: 'KOT Operation Failed',
-        description: err.message || 'Could not generate KOT.',
+        title: 'KOT Generation Failed',
+        description: err.message,
       });
     } finally {
       setIsSubmittingKOT(false);
@@ -231,7 +279,7 @@ export const POSView: React.FC = () => {
       addToast({
         type: 'warning',
         title: 'Empty Cart',
-        description: 'Please add items before generating bill.',
+        description: 'Please add at least one item before generating bill.',
       });
       return;
     }
@@ -275,8 +323,22 @@ export const POSView: React.FC = () => {
         orderId = orderToSettle.id;
         loadExistingOrder(orderToSettle, menuItems);
       } else {
-        // Fetch current order
-        orderToSettle = await ordersApi.getOrder(orderId);
+        // Ensure latest cart items are saved to backend
+        const updatePayload = {
+          items: cartItems.map((ci) => ({
+            menu_item_id: ci.menuItem.id,
+            variant_id: ci.variant?.id,
+            quantity: ci.quantity,
+            notes: ci.notes,
+            addons: ci.addons.map((a) => ({
+              addon_id: a.id,
+              addon_name: a.name,
+              price_paise: a.price_paise,
+            })),
+          })),
+        };
+        orderToSettle = await ordersApi.updateOrderItems(orderId, updatePayload);
+        loadExistingOrder(orderToSettle, menuItems);
       }
 
       openSettlementModal(orderToSettle);
@@ -289,18 +351,17 @@ export const POSView: React.FC = () => {
     }
   };
 
-  const taxRate = 5.0; // standard GST
   const subtotalPaise = getSubtotalPaise();
   const discountPaise = getDiscountPaise();
-  const estimatedTaxPaise = getEstimatedTaxPaise(taxRate);
-  const grandTotalPaise = getGrandTotalPaise(taxRate);
+  const estimatedTaxPaise = getEstimatedTaxPaise(taxRate, isTaxInclusive, isTaxEnabled);
+  const grandTotalPaise = getGrandTotalPaise(taxRate, isTaxInclusive, isTaxEnabled);
 
   return (
     <div className="flex h-full w-full gap-4 overflow-hidden select-none">
       {/* ========================================================= */}
       {/* LEFT COLUMN: MENU CATALOG (~65% width)                   */}
       {/* ========================================================= */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white rounded-card border border-[#E8EAF0] shadow-card">
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-white rounded-card border border-[#E8EAF0] shadow-card">
         {/* POS Header Controls */}
         <div className="p-4 border-b border-[#E8EAF0] space-y-3 bg-[#FAFAFB]">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -396,7 +457,7 @@ export const POSView: React.FC = () => {
               </div>
             )}
 
-            {/* Search Input & Veg Toggles */}
+            {/* Search Input & Item Type Toggles */}
             <div className="flex items-center gap-2 flex-1 max-w-md">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
@@ -409,22 +470,22 @@ export const POSView: React.FC = () => {
                 />
               </div>
 
-              {/* Veg / Non-Veg Toggle */}
+              {/* Veg / Non-Veg / Egg Toggle */}
               <div className="flex rounded-lg border border-[#E8EAF0] bg-white p-0.5 text-xs">
                 <button
                   type="button"
-                  onClick={() => setVegFilter('all')}
-                  className={`px-2 py-1 rounded text-[11px] font-semibold ${
-                    vegFilter === 'all' ? 'bg-[#F07818] text-white' : 'text-[#6B7280]'
+                  onClick={() => setItemTypeFilter('all')}
+                  className={`px-2 py-1 rounded text-[11px] font-semibold cursor-pointer ${
+                    itemTypeFilter === 'all' ? 'bg-[#F07818] text-white' : 'text-[#6B7280]'
                   }`}
                 >
                   All
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVegFilter('veg')}
-                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 ${
-                    vegFilter === 'veg' ? 'bg-[#16865B] text-white' : 'text-[#16865B]'
+                  onClick={() => setItemTypeFilter('veg')}
+                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer ${
+                    itemTypeFilter === 'veg' ? 'bg-[#16865B] text-white' : 'text-[#16865B]'
                   }`}
                 >
                   <span className="h-2 w-2 rounded-full bg-[#16865B] inline-block" />
@@ -432,13 +493,23 @@ export const POSView: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVegFilter('non_veg')}
-                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 ${
-                    vegFilter === 'non_veg' ? 'bg-[#D94343] text-white' : 'text-[#D94343]'
+                  onClick={() => setItemTypeFilter('non_veg')}
+                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer ${
+                    itemTypeFilter === 'non_veg' ? 'bg-[#D94343] text-white' : 'text-[#D94343]'
                   }`}
                 >
                   <span className="h-2 w-2 rounded-full bg-[#D94343] inline-block" />
                   Non-Veg
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setItemTypeFilter('egg')}
+                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer ${
+                    itemTypeFilter === 'egg' ? 'bg-[#E39D12] text-white' : 'text-[#E39D12]'
+                  }`}
+                >
+                  <span className="h-2 w-2 rounded-full bg-[#E39D12] inline-block" />
+                  Egg
                 </button>
               </div>
             </div>
@@ -481,13 +552,14 @@ export const POSView: React.FC = () => {
           ) : filteredItems.length === 0 ? (
             <EmptyState
               title="No items found"
-              description="Try adjusting your search query or category filter."
+              description="Try adjusting your search query, item type or category filter."
             />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredItems.map((item) => {
                 const hasVariants = item.variants && item.variants.length > 0;
                 const hasAddons = item.addon_groups && item.addon_groups.length > 0;
+                const itemType = item.item_type || (item.is_veg ? 'veg' : 'non_veg');
 
                 return (
                   <div
@@ -500,22 +572,36 @@ export const POSView: React.FC = () => {
                       <div className="flex items-center justify-between gap-1 mb-1.5">
                         <div
                           className={`flex h-4 w-4 items-center justify-center rounded border ${
-                            item.is_veg
+                            itemType === 'veg'
                               ? 'border-[#16865B] text-[#16865B]'
+                              : itemType === 'egg'
+                              ? 'border-[#E39D12] text-[#E39D12]'
                               : 'border-[#D94343] text-[#D94343]'
                           }`}
                         >
                           <span
                             className={`h-2 w-2 rounded-full ${
-                              item.is_veg ? 'bg-[#16865B]' : 'bg-[#D94343]'
+                              itemType === 'veg'
+                                ? 'bg-[#16865B]'
+                                : itemType === 'egg'
+                                ? 'bg-[#E39D12]'
+                                : 'bg-[#D94343]'
                             }`}
                           />
                         </div>
-                        {item.item_code && (
-                          <span className="text-[10px] font-mono text-[#9CA3AF]">
-                            {item.item_code}
-                          </span>
-                        )}
+
+                        <div className="flex items-center gap-1">
+                          {item.is_bestseller && (
+                            <span className="rounded bg-[#FFF0E3] px-1 py-0.2 text-[8px] font-bold text-[#C85A0A] uppercase">
+                              ★ Bestseller
+                            </span>
+                          )}
+                          {item.item_code && (
+                            <span className="text-[10px] font-mono text-[#9CA3AF]">
+                              {item.item_code}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Name & Portions tag */}
@@ -578,7 +664,7 @@ export const POSView: React.FC = () => {
             <button
               type="button"
               onClick={clearCart}
-              className="text-xs font-semibold text-[#D94343] hover:underline"
+              className="text-xs font-semibold text-[#D94343] hover:underline cursor-pointer"
             >
               Clear
             </button>
@@ -643,7 +729,7 @@ export const POSView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => updateQuantity(idx, -1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E8EAF0] text-[#202124] hover:bg-[#F7F8FA]"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E8EAF0] text-[#202124] hover:bg-[#F7F8FA] cursor-pointer"
                     >
                       <Minus className="h-3 w-3" />
                     </button>
@@ -653,14 +739,14 @@ export const POSView: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => updateQuantity(idx, 1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E8EAF0] text-[#202124] hover:bg-[#F7F8FA]"
+                      className="flex h-7 w-7 items-center justify-center rounded-md border border-[#E8EAF0] text-[#202124] hover:bg-[#F7F8FA] cursor-pointer"
                     >
                       <Plus className="h-3 w-3" />
                     </button>
                     <button
                       type="button"
                       onClick={() => removeItem(idx)}
-                      className="ml-1 p-1 text-[#D94343] hover:bg-[#FDECEC] rounded"
+                      className="ml-1 p-1 text-[#D94343] hover:bg-[#FDECEC] rounded cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -684,10 +770,19 @@ export const POSView: React.FC = () => {
                 <span className="font-semibold">-{formatINR(discountPaise)}</span>
               </div>
             )}
-            <div className="flex justify-between text-[#6B7280]">
-              <span>GST ({taxRate}%)</span>
-              <span className="font-semibold text-[#202124]">+{formatINR(estimatedTaxPaise)}</span>
-            </div>
+            
+            {/* Dynamic Tax Display */}
+            {isTaxEnabled && taxRate > 0 && (
+              <div className="flex justify-between text-[#6B7280]">
+                <span>
+                  {isTaxInclusive ? 'Taxes Included' : 'Tax'} ({taxRate}% {taxType})
+                </span>
+                <span className="font-semibold text-[#202124]">
+                  {isTaxInclusive ? '' : '+'}{formatINR(estimatedTaxPaise)}
+                </span>
+              </div>
+            )}
+
             <div className="flex justify-between items-baseline pt-1.5 border-t border-[#E8EAF0] text-sm">
               <span className="font-bold text-[#202124]">Grand Total</span>
               <span className="text-xl font-extrabold text-[#F07818]">

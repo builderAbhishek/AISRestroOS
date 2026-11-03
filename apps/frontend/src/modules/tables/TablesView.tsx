@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { tablesApi, ordersApi } from '@/services/api';
+import { tablesApi, ordersApi, menuApi } from '@/services/api';
 import { useUIStore } from '@/store/uiStore';
 import { useCartStore } from '@/store/cartStore';
 import { formatINR } from '@/lib/utils';
-import { RestaurantTable } from '@/types';
+import { RestaurantTable, Order } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -23,8 +23,8 @@ import {
 
 export const TablesView: React.FC = () => {
   const queryClient = useQueryClient();
-  const { setCurrentRoute, openSettlementModal, addToast } = useUIStore();
-  const { setOrderType, setTable, loadExistingOrder } = useCartStore();
+  const { navigateTo, openSettlementModal, addToast } = useUIStore();
+  const { setOrderType, setTable, loadExistingOrder, clearCart } = useCartStore();
 
   const [isAddTableOpen, setIsAddTableOpen] = useState(false);
   const [tableNumber, setTableNumber] = useState('');
@@ -37,11 +37,6 @@ export const TablesView: React.FC = () => {
     refetchInterval: 5000,
   });
 
-  const { data: menuItems = [] } = useQuery({
-    queryKey: ['menu-items'],
-    queryFn: () => tablesApi.listTables(),
-  });
-
   // Group tables by section
   const sections = Array.from(new Set(tables.map((t) => t.section || 'Main Hall')));
 
@@ -49,22 +44,37 @@ export const TablesView: React.FC = () => {
     setOrderType('dine_in');
     setTable(table.id, table.table_number);
 
-    if (table.status === 'occupied' && table.current_order_id) {
+    if (table.status === 'occupied') {
       try {
-        const order = await ordersApi.getOrder(table.current_order_id);
-        const allItems = await (await fetch('/api/v1/menu/items')).json();
-        loadExistingOrder(order, allItems);
-        addToast({
-          type: 'info',
-          title: `Resumed Table ${table.table_number}`,
-          description: `Loaded active order ${order.order_code}.`,
-        });
+        let order: Order | null = null;
+        if (table.current_order_id) {
+          order = await ordersApi.getOrder(table.current_order_id);
+        } else {
+          order = await tablesApi.getActiveOrder(table.id);
+        }
+
+        if (order) {
+          const allItems = await menuApi.listItems();
+          loadExistingOrder(order, allItems);
+          addToast({
+            type: 'info',
+            title: `Resumed Table ${table.table_number}`,
+            description: `Loaded active order ${order.order_code}.`,
+          });
+          navigateTo('pos', { tableId: table.id, orderId: order.id });
+          return;
+        }
       } catch (err: any) {
         addToast({ type: 'error', title: 'Error', description: err.message });
       }
+    } else {
+      // Starting new order on free table
+      clearCart();
+      setOrderType('dine_in');
+      setTable(table.id, table.table_number);
     }
 
-    setCurrentRoute('pos');
+    navigateTo('pos', { tableId: table.id });
   };
 
   const handleCreateTable = async (e: React.FormEvent) => {

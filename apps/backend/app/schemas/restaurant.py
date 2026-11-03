@@ -4,6 +4,8 @@ from datetime import datetime
 
 
 class RestaurantSettingsBase(BaseModel):
+    is_tax_enabled: bool = Field(default=True)
+    is_tax_inclusive: bool = Field(default=False)
     tax_rate_percent: float = Field(default=5.0, ge=0.0, le=100.0)
     tax_type: str = Field(default="CGST_SGST")
     order_types_json: str = Field(default='["dine_in", "takeaway", "delivery"]')
@@ -14,6 +16,18 @@ class RestaurantSettingsBase(BaseModel):
     kot_prefix: str = Field(default="KOT-")
     bill_footer_text: str = Field(default="Thank you for dining with us! Please visit again.")
     auto_cut_paper: bool = True
+
+
+class RestaurantSettingsUpdate(BaseModel):
+    is_tax_enabled: Optional[bool] = None
+    is_tax_inclusive: Optional[bool] = None
+    tax_rate_percent: Optional[float] = None
+    tax_type: Optional[str] = None
+    paper_width_mm: Optional[int] = None
+    invoice_prefix: Optional[str] = None
+    kot_prefix: Optional[str] = None
+    bill_footer_text: Optional[str] = None
+    auto_cut_paper: Optional[bool] = None
 
 
 class RestaurantSettingsResponse(RestaurantSettingsBase):
@@ -39,6 +53,8 @@ class RestaurantSetupRequest(BaseModel):
     gst_registered: bool = False
     gstin: Optional[str] = None
 
+    is_tax_enabled: bool = True
+    is_tax_inclusive: bool = False
     tax_rate_percent: float = 5.0
     tax_type: str = "CGST_SGST"
     paper_width_mm: int = 80

@@ -6,6 +6,8 @@ export type PaymentMethod = 'cash' | 'upi' | 'card' | 'other';
 export interface RestaurantSettings {
   id: string;
   restaurant_id: string;
+  is_tax_enabled: boolean;
+  is_tax_inclusive: boolean;
   tax_rate_percent: number;
   tax_type: string;
   order_types_json: string;
@@ -88,7 +90,13 @@ export interface MenuItem {
   base_price_paise: number;
   base_price_inr: number;
   is_veg: boolean;
+  item_type: 'veg' | 'non_veg' | 'egg';
   is_available: boolean;
+  is_recommended: boolean;
+  is_bestseller: boolean;
+  is_tax_inclusive?: boolean | null;
+  tax_rate_override_percent?: number | null;
+  preparation_time_minutes?: number | null;
   has_variants: boolean;
   image_url?: string;
   sort_order: number;
@@ -157,10 +165,16 @@ export interface Order {
   discount_paise: number;
   discount_inr: number;
   tax_rate_percent: number;
+  tax_type: string;
+  is_tax_inclusive: boolean;
+  taxable_amount_paise: number;
+  taxable_amount_inr: number;
   cgst_paise: number;
   cgst_inr: number;
   sgst_paise: number;
   sgst_inr: number;
+  igst_paise: number;
+  igst_inr: number;
   tax_paise: number;
   tax_inr: number;
   total_paise: number;
@@ -223,10 +237,17 @@ export interface Invoice {
   subtotal_inr: number;
   discount_paise: number;
   discount_inr: number;
+  taxable_amount_paise: number;
+  taxable_amount_inr: number;
+  tax_rate_percent: number;
+  tax_type: string;
+  is_tax_inclusive: boolean;
   cgst_paise: number;
   cgst_inr: number;
   sgst_paise: number;
   sgst_inr: number;
+  igst_paise: number;
+  igst_inr: number;
   total_tax_paise: number;
   total_tax_inr: number;
   grand_total_paise: number;
@@ -254,15 +275,21 @@ export interface BillCalculation {
   subtotal_inr: number;
   discount_paise: number;
   discount_inr: number;
+  taxable_amount_paise: number;
+  taxable_amount_inr: number;
   cgst_paise: number;
   cgst_inr: number;
   sgst_paise: number;
   sgst_inr: number;
+  igst_paise: number;
+  igst_inr: number;
   total_tax_paise: number;
   total_tax_inr: number;
   grand_total_paise: number;
   grand_total_inr: number;
   tax_rate_percent: number;
+  tax_type: string;
+  is_tax_inclusive: boolean;
 }
 
 export interface DashboardKPICards {

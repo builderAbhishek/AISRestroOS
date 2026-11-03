@@ -65,8 +65,10 @@ def create_order(
     order_code = f"ORD-{order_number:04d}"
 
     settings = restaurant.settings
-    tax_rate = settings.tax_rate_percent if settings else 5.0
-    tax_type = settings.tax_type if settings else "CGST_SGST"
+    is_tax_enabled = getattr(settings, 'is_tax_enabled', True) if settings else False
+    is_tax_inclusive = getattr(settings, 'is_tax_inclusive', False) if settings else False
+    tax_rate = (settings.tax_rate_percent if (settings and is_tax_enabled) else 0.0)
+    tax_type = (settings.tax_type if (settings and is_tax_enabled) else "NON_GST")
 
     order = Order(
         restaurant_id=restaurant.id,
@@ -80,6 +82,8 @@ def create_order(
         customer_address=data.customer_address,
         status="active",
         tax_rate_percent=tax_rate,
+        tax_type=tax_type,
+        is_tax_inclusive=is_tax_inclusive,
         notes=data.notes,
         discount_type=data.discount_type,
         discount_value=data.discount_value,
@@ -150,12 +154,16 @@ def create_order(
         discount_value=data.discount_value,
         tax_rate_percent=tax_rate,
         tax_type=tax_type,
+        is_tax_inclusive=is_tax_inclusive,
+        is_tax_enabled=tax_rate > 0,
     )
 
     order.subtotal_paise = financials["subtotal_paise"]
     order.discount_paise = financials["discount_paise"]
+    order.taxable_amount_paise = financials["taxable_amount_paise"]
     order.cgst_paise = financials["cgst_paise"]
     order.sgst_paise = financials["sgst_paise"]
+    order.igst_paise = financials.get("igst_paise", 0)
     order.tax_paise = financials["tax_paise"]
     order.total_paise = financials["grand_total_paise"]
 
@@ -180,6 +188,7 @@ def update_order_items(
     """
     Updates or appends items to an existing active order.
     Preserves existing printed quantities where items match.
+    Does NOT delete existing items or their linked KOT items.
     """
     order = (
         db.query(Order)
@@ -198,23 +207,16 @@ def update_order_items(
     if data.notes is not None:
         order.notes = data.notes
 
-    # Keep a map of previous printed items
-    previous_printed_map = {}
+    # Index existing order items
+    existing_items_by_key = {}
     for item in order.items:
-        key = (item.menu_item_id, item.variant_id)
-        previous_printed_map[key] = max(
-            previous_printed_map.get(key, 0), item.printed_quantity
-        )
+        addon_key = tuple(sorted([a.addon_id or a.addon_name for a in item.addons]))
+        key = (item.menu_item_id, item.variant_id, addon_key, item.notes or "")
+        existing_items_by_key[key] = item
 
-    # Delete existing items and recreate
-    db.query(OrderItem).filter(OrderItem.order_id == order.id).delete()
-    db.flush()
-
-    settings = restaurant.settings
-    tax_rate = order.tax_rate_percent
-    tax_type = settings.tax_type if settings else "CGST_SGST"
-
+    processed_item_ids = set()
     line_totals = []
+
     for item_in in data.items:
         menu_item = (
             db.query(MenuItem)
@@ -243,48 +245,69 @@ def update_order_items(
         line_total = unit_price * item_in.quantity
         line_totals.append(line_total)
 
-        key = (menu_item.id, variant.id if variant else None)
-        previously_printed = previous_printed_map.get(key, 0)
-        printed_qty = min(previously_printed, item_in.quantity)
-        kot_status = "printed" if printed_qty >= item_in.quantity else "unprinted"
+        addon_key = tuple(sorted([a.addon_id or a.addon_name for a in item_in.addons]))
+        key = (menu_item.id, variant.id if variant else None, addon_key, item_in.notes or "")
 
-        order_item = OrderItem(
-            order_id=order.id,
-            menu_item_id=menu_item.id,
-            variant_id=variant.id if variant else None,
-            item_name=menu_item.name,
-            variant_name=variant.name if variant else None,
-            unit_price_paise=unit_price,
-            quantity=item_in.quantity,
-            line_total_paise=line_total,
-            notes=item_in.notes,
-            kot_status=kot_status,
-            printed_quantity=printed_qty,
-        )
-        db.add(order_item)
-        db.flush()
-
-        for a_in in item_in.addons:
-            addon_record = OrderItemAddon(
-                order_item_id=order_item.id,
-                addon_id=a_in.addon_id,
-                addon_name=a_in.addon_name,
-                price_paise=a_in.price_paise,
+        if key in existing_items_by_key:
+            # Update existing item in place
+            existing_item = existing_items_by_key[key]
+            existing_item.quantity = item_in.quantity
+            existing_item.unit_price_paise = unit_price
+            existing_item.line_total_paise = line_total
+            if item_in.quantity > existing_item.printed_quantity:
+                existing_item.kot_status = "unprinted"
+            processed_item_ids.add(existing_item.id)
+        else:
+            # Add new item
+            new_item = OrderItem(
+                order_id=order.id,
+                menu_item_id=menu_item.id,
+                variant_id=variant.id if variant else None,
+                item_name=menu_item.name,
+                variant_name=variant.name if variant else None,
+                unit_price_paise=unit_price,
+                quantity=item_in.quantity,
+                line_total_paise=line_total,
+                notes=item_in.notes,
+                kot_status="unprinted",
+                printed_quantity=0,
             )
-            db.add(addon_record)
+            db.add(new_item)
+            db.flush()
+
+            for a_in in item_in.addons:
+                addon_record = OrderItemAddon(
+                    order_item_id=new_item.id,
+                    addon_id=a_in.addon_id,
+                    addon_name=a_in.addon_name,
+                    price_paise=a_in.price_paise,
+                )
+                db.add(addon_record)
+
+            processed_item_ids.add(new_item.id)
+
+    # Clean up any removed items that were never printed to kitchen
+    for item in list(order.items):
+        if item.id not in processed_item_ids:
+            if item.printed_quantity == 0:
+                db.delete(item)
 
     financials = calculate_order_financials(
         items_line_totals=line_totals,
         discount_type=order.discount_type,
         discount_value=order.discount_value,
-        tax_rate_percent=tax_rate,
-        tax_type=tax_type,
+        tax_rate_percent=order.tax_rate_percent,
+        tax_type=order.tax_type,
+        is_tax_inclusive=order.is_tax_inclusive,
+        is_tax_enabled=order.tax_rate_percent > 0,
     )
 
     order.subtotal_paise = financials["subtotal_paise"]
     order.discount_paise = financials["discount_paise"]
+    order.taxable_amount_paise = financials["taxable_amount_paise"]
     order.cgst_paise = financials["cgst_paise"]
     order.sgst_paise = financials["sgst_paise"]
+    order.igst_paise = financials.get("igst_paise", 0)
     order.tax_paise = financials["tax_paise"]
     order.total_paise = financials["grand_total_paise"]
 

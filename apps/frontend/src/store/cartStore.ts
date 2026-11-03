@@ -50,42 +50,105 @@ interface CartState {
   // Selectors
   getSubtotalPaise: () => number;
   getDiscountPaise: () => number;
-  getEstimatedTaxPaise: (taxRatePercent: number) => number;
-  getGrandTotalPaise: (taxRatePercent: number) => number;
+  getEstimatedTaxPaise: (taxRatePercent: number, isTaxInclusive?: boolean, isTaxEnabled?: boolean) => number;
+  getGrandTotalPaise: (taxRatePercent: number, isTaxInclusive?: boolean, isTaxEnabled?: boolean) => number;
   getTotalItemsCount: () => number;
 }
 
+const STORAGE_KEY = 'aisrestroos_cart_state_v1';
+
+function loadPersistedState(): Partial<CartState> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function persistState(state: Partial<CartState>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        orderType: state.orderType,
+        selectedTableId: state.selectedTableId,
+        selectedTableNumber: state.selectedTableNumber,
+        activeOrderId: state.activeOrderId,
+        activeOrderCode: state.activeOrderCode,
+        customerName: state.customerName,
+        customerPhone: state.customerPhone,
+        customerAddress: state.customerAddress,
+        items: state.items,
+        discountType: state.discountType,
+        discountValue: state.discountValue,
+        orderNotes: state.orderNotes,
+      })
+    );
+  } catch {}
+}
+
+const initialSaved = loadPersistedState();
+
 export const useCartStore = create<CartState>((set, get) => ({
-  orderType: 'dine_in',
-  selectedTableId: null,
-  selectedTableNumber: null,
-  activeOrderId: null,
-  activeOrderCode: null,
-  customerName: '',
-  customerPhone: '',
-  customerAddress: '',
-  items: [],
-  discountType: null,
-  discountValue: 0,
-  orderNotes: '',
+  orderType: initialSaved.orderType || 'dine_in',
+  selectedTableId: initialSaved.selectedTableId || null,
+  selectedTableNumber: initialSaved.selectedTableNumber || null,
+  activeOrderId: initialSaved.activeOrderId || null,
+  activeOrderCode: initialSaved.activeOrderCode || null,
+  customerName: initialSaved.customerName || '',
+  customerPhone: initialSaved.customerPhone || '',
+  customerAddress: initialSaved.customerAddress || '',
+  items: initialSaved.items || [],
+  discountType: initialSaved.discountType || null,
+  discountValue: initialSaved.discountValue || 0,
+  orderNotes: initialSaved.orderNotes || '',
 
-  setOrderType: (type) =>
-    set({
-      orderType: type,
-      // If switching to takeaway/delivery, clear table
-      ...(type !== 'dine_in' ? { selectedTableId: null, selectedTableNumber: null } : {}),
-    }),
+  setOrderType: (type) => {
+    set((state) => {
+      const next = {
+        orderType: type,
+        ...(type !== 'dine_in' ? { selectedTableId: null, selectedTableNumber: null } : {}),
+      };
+      persistState({ ...state, ...next });
+      return next;
+    });
+  },
 
-  setTable: (tableId, tableNumber) =>
-    set({ selectedTableId: tableId, selectedTableNumber: tableNumber }),
+  setTable: (tableId, tableNumber) => {
+    set((state) => {
+      const next = { selectedTableId: tableId, selectedTableNumber: tableNumber };
+      persistState({ ...state, ...next });
+      return next;
+    });
+  },
 
-  setCustomer: (name, phone, address = '') =>
-    set({ customerName: name, customerPhone: phone, customerAddress: address }),
+  setCustomer: (name, phone, address = '') => {
+    set((state) => {
+      const next = { customerName: name, customerPhone: phone, customerAddress: address };
+      persistState({ ...state, ...next });
+      return next;
+    });
+  },
 
-  setDiscount: (type, value) =>
-    set({ discountType: type, discountValue: Math.max(0, value) }),
+  setDiscount: (type, value) => {
+    set((state) => {
+      const next = { discountType: type, discountValue: Math.max(0, value) };
+      persistState({ ...state, ...next });
+      return next;
+    });
+  },
 
-  setOrderNotes: (notes) => set({ orderNotes: notes }),
+  setOrderNotes: (notes) => {
+    set((state) => {
+      const next = { orderNotes: notes };
+      persistState({ ...state, ...next });
+      return next;
+    });
+  },
 
   addItem: (item, variant, addons = [], quantity = 1, notes = '') => {
     set((state) => {
@@ -100,32 +163,34 @@ export const useCartStore = create<CartState>((set, get) => ({
           ci.variant?.id === variant?.id &&
           ci.addons.length === addons.length &&
           ci.addons.every((a) => addons.some((na) => na.id === a.id)) &&
-          ci.notes === notes
+          (ci.notes || '') === (notes || '')
       );
 
+      let updatedItems: CartItem[];
       if (existingIdx >= 0) {
-        const updated = [...state.items];
-        const existing = updated[existingIdx];
+        updatedItems = [...state.items];
+        const existing = updatedItems[existingIdx];
         const newQty = existing.quantity + quantity;
-        updated[existingIdx] = {
+        updatedItems[existingIdx] = {
           ...existing,
           quantity: newQty,
           lineTotalPaise: unitPrice * newQty,
         };
-        return { items: updated };
+      } else {
+        const newItem: CartItem = {
+          menuItem: item,
+          variant,
+          addons,
+          quantity,
+          unitPricePaise: unitPrice,
+          lineTotalPaise: unitPrice * quantity,
+          notes,
+        };
+        updatedItems = [...state.items, newItem];
       }
 
-      const newItem: CartItem = {
-        menuItem: item,
-        variant,
-        addons,
-        quantity,
-        unitPricePaise: unitPrice,
-        lineTotalPaise: unitPrice * quantity,
-        notes,
-      };
-
-      return { items: [...state.items, newItem] };
+      persistState({ ...state, items: updatedItems });
+      return { items: updatedItems };
     });
   },
 
@@ -136,23 +201,29 @@ export const useCartStore = create<CartState>((set, get) => ({
       if (!item) return state;
 
       const newQty = item.quantity + delta;
+      let finalItems: CartItem[];
       if (newQty <= 0) {
-        return { items: updated.filter((_, i) => i !== index) };
+        finalItems = updated.filter((_, i) => i !== index);
+      } else {
+        updated[index] = {
+          ...item,
+          quantity: newQty,
+          lineTotalPaise: item.unitPricePaise * newQty,
+        };
+        finalItems = updated;
       }
 
-      updated[index] = {
-        ...item,
-        quantity: newQty,
-        lineTotalPaise: item.unitPricePaise * newQty,
-      };
-      return { items: updated };
+      persistState({ ...state, items: finalItems });
+      return { items: finalItems };
     });
   },
 
   removeItem: (index) => {
-    set((state) => ({
-      items: state.items.filter((_, i) => i !== index),
-    }));
+    set((state) => {
+      const finalItems = state.items.filter((_, i) => i !== index);
+      persistState({ ...state, items: finalItems });
+      return { items: finalItems };
+    });
   },
 
   updateNotes: (index, notes) => {
@@ -161,6 +232,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       if (updated[index]) {
         updated[index] = { ...updated[index], notes };
       }
+      persistState({ ...state, items: updated });
       return { items: updated };
     });
   },
@@ -174,7 +246,10 @@ export const useCartStore = create<CartState>((set, get) => ({
           name: oi.item_name,
           base_price_paise: oi.unit_price_paise,
           is_veg: true,
+          item_type: 'veg',
           is_available: true,
+          is_recommended: false,
+          is_bestseller: false,
           has_variants: !!oi.variant_id,
           variants: [],
           addon_groups: [],
@@ -204,7 +279,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     });
 
-    set({
+    const nextState = {
       orderType: order.order_type,
       selectedTableId: order.table_id || null,
       selectedTableNumber: order.table_number_snapshot || null,
@@ -217,11 +292,14 @@ export const useCartStore = create<CartState>((set, get) => ({
       discountType: order.discount_type || null,
       discountValue: order.discount_value || 0,
       orderNotes: order.notes || '',
-    });
+    };
+
+    persistState(nextState);
+    set(nextState);
   },
 
-  clearCart: () =>
-    set({
+  clearCart: () => {
+    const emptyState = {
       selectedTableId: null,
       selectedTableNumber: null,
       activeOrderId: null,
@@ -233,7 +311,10 @@ export const useCartStore = create<CartState>((set, get) => ({
       discountType: null,
       discountValue: 0,
       orderNotes: '',
-    }),
+    };
+    persistState(emptyState);
+    set(emptyState);
+  },
 
   getSubtotalPaise: () => {
     return get().items.reduce((sum, item) => sum + item.lineTotalPaise, 0);
@@ -249,19 +330,28 @@ export const useCartStore = create<CartState>((set, get) => ({
     return Math.min(subtotal, Math.round(discountValue * 100));
   },
 
-  getEstimatedTaxPaise: (taxRatePercent) => {
+  getEstimatedTaxPaise: (taxRatePercent, isTaxInclusive = false, isTaxEnabled = true) => {
+    if (!isTaxEnabled || taxRatePercent <= 0) return 0;
     const subtotal = get().getSubtotalPaise();
     const discount = get().getDiscountPaise();
-    const taxable = Math.max(0, subtotal - discount);
-    if (taxable <= 0 || taxRatePercent <= 0) return 0;
-    return Math.round((taxable * taxRatePercent) / 100);
+    const net = Math.max(0, subtotal - discount);
+    if (net <= 0) return 0;
+    if (isTaxInclusive) {
+      return Math.round((net * taxRatePercent) / (100 + taxRatePercent));
+    }
+    return Math.round((net * taxRatePercent) / 100);
   },
 
-  getGrandTotalPaise: (taxRatePercent) => {
+  getGrandTotalPaise: (taxRatePercent, isTaxInclusive = false, isTaxEnabled = true) => {
     const subtotal = get().getSubtotalPaise();
     const discount = get().getDiscountPaise();
-    const tax = get().getEstimatedTaxPaise(taxRatePercent);
-    return Math.max(0, subtotal - discount + tax);
+    const net = Math.max(0, subtotal - discount);
+    if (!isTaxEnabled || taxRatePercent <= 0) return net;
+    if (isTaxInclusive) {
+      return net;
+    }
+    const tax = Math.round((net * taxRatePercent) / 100);
+    return net + tax;
   },
 
   getTotalItemsCount: () => {

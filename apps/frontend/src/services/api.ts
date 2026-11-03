@@ -80,12 +80,24 @@ export const menuApi = {
     }),
   deleteCategory: (id: string) =>
     request<void>(`/menu/categories/${id}`, { method: 'DELETE' }),
+  reorderCategories: (items: { id: string; sort_order: number }[]) =>
+    request<MenuCategory[]>('/menu/categories/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    }),
 
-  listItems: (params?: { category_id?: string; search?: string; is_veg?: boolean; available_only?: boolean }) => {
+  listItems: (params?: {
+    category_id?: string;
+    search?: string;
+    is_veg?: boolean;
+    item_type?: 'veg' | 'non_veg' | 'egg';
+    available_only?: boolean;
+  }) => {
     const searchParams = new URLSearchParams();
     if (params?.category_id) searchParams.append('category_id', params.category_id);
     if (params?.search) searchParams.append('search', params.search);
-    if (params?.is_veg !== undefined) searchParams.append('is_veg', String(params.is_veg));
+    if (params?.item_type) searchParams.append('item_type', params.item_type);
+    else if (params?.is_veg !== undefined) searchParams.append('is_veg', String(params.is_veg));
     if (params?.available_only !== undefined) searchParams.append('available_only', String(params.available_only));
     const qs = searchParams.toString();
     return request<MenuItem[]>(`/menu/items${qs ? `?${qs}` : ''}`);
@@ -100,6 +112,10 @@ export const menuApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+  duplicateItem: (id: string) =>
+    request<MenuItem>(`/menu/items/${id}/duplicate`, {
+      method: 'POST',
+    }),
   deleteItem: (id: string) =>
     request<void>(`/menu/items/${id}`, { method: 'DELETE' }),
   toggleAvailability: (id: string) =>
@@ -111,6 +127,8 @@ export const menuApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  deleteAddonGroup: (id: string) =>
+    request<void>(`/menu/addon-groups/${id}`, { method: 'DELETE' }),
 };
 
 export const tablesApi = {
@@ -160,6 +178,8 @@ export const ordersApi = {
 
 export const kotApi = {
   addAndPrintKOT: (orderId: string) =>
+    request<KOTPrintResult>(`/orders/${orderId}/kot`, { method: 'POST' }),
+  generateKOT: (orderId: string) =>
     request<KOTPrintResult>(`/orders/${orderId}/kot`, { method: 'POST' }),
   listKOTs: (orderId: string) =>
     request<KOT[]>(`/orders/${orderId}/kots`),

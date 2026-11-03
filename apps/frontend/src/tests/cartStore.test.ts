@@ -10,7 +10,10 @@ const mockMenuItem: MenuItem = {
   base_price_paise: 20000, // ₹200.00
   base_price_inr: 200.0,
   is_veg: true,
+  item_type: 'veg',
   is_available: true,
+  is_recommended: false,
+  is_bestseller: false,
   has_variants: true,
   sort_order: 1,
   variants: [],
@@ -99,5 +102,20 @@ describe('POS Cart Store', () => {
 
     // Grand total = 18000 + 900 = 18900 paise (₹189.00)
     expect(useCartStore.getState().getGrandTotalPaise(5.0)).toBe(18900);
+  });
+
+  it('calculates inclusive tax and disabled tax correctly', () => {
+    useCartStore.getState().addItem(mockMenuItem, undefined, [], 1); // ₹200 (20000 paise)
+
+    // Inclusive tax 5% on ₹200:
+    // Tax = round(20000 * 5 / 105) = 952 paise (₹9.52)
+    // Taxable = 20000 - 952 = 19048 paise
+    expect(useCartStore.getState().getEstimatedTaxPaise(5.0, true, true)).toBe(952);
+    // Grand total remains ₹200 (20000 paise) in inclusive mode
+    expect(useCartStore.getState().getGrandTotalPaise(5.0, true, true)).toBe(20000);
+
+    // Tax disabled (isTaxEnabled = false)
+    expect(useCartStore.getState().getEstimatedTaxPaise(5.0, false, false)).toBe(0);
+    expect(useCartStore.getState().getGrandTotalPaise(5.0, false, false)).toBe(20000);
   });
 });

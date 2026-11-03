@@ -44,6 +44,8 @@ class RestaurantSettings(TimestampedUUIDModel):
     restaurant_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("restaurants.id", ondelete="CASCADE"), unique=True, nullable=False
     )
+    is_tax_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_tax_inclusive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     tax_rate_percent: Mapped[float] = mapped_column(Float, default=5.0, nullable=False)
     tax_type: Mapped[str] = mapped_column(String(20), default="CGST_SGST", nullable=False)
     order_types_json: Mapped[str] = mapped_column(

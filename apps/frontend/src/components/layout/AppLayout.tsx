@@ -46,7 +46,7 @@ export const AppLayout: React.FC = () => {
         <TopHeader restaurant={restaurant} />
 
         {/* Dynamic Page Content with Independent Scroll */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className={`flex-1 min-h-0 flex flex-col p-4 md:p-6 ${currentRoute === 'pos' ? 'h-full overflow-hidden' : 'overflow-y-auto'}`}>
           {currentRoute === 'dashboard' && <DashboardView />}
           {currentRoute === 'pos' && <POSView />}
           {currentRoute === 'orders' && <OrdersView />}

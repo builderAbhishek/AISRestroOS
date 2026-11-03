@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import String, Integer, ForeignKey
+from sqlalchemy import String, Integer, Float, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import TimestampedUUIDModel
 
@@ -14,8 +14,13 @@ class Invoice(TimestampedUUIDModel):
 
     subtotal_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     discount_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    taxable_amount_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    tax_rate_percent: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    tax_type: Mapped[str] = mapped_column(String(20), default="CGST_SGST", nullable=False)
+    is_tax_inclusive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     cgst_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     sgst_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    igst_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_tax_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     grand_total_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     rounded_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

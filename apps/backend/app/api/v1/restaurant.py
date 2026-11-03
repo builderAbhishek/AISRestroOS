@@ -300,6 +300,8 @@ def setup_restaurant(data: RestaurantSetupRequest, db: Session = Depends(get_db)
 
     settings = RestaurantSettings(
         restaurant_id=restaurant.id,
+        is_tax_enabled=data.is_tax_enabled,
+        is_tax_inclusive=data.is_tax_inclusive,
         tax_rate_percent=data.tax_rate_percent,
         tax_type=data.tax_type,
         paper_width_mm=data.paper_width_mm,

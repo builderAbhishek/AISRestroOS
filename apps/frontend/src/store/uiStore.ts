@@ -12,6 +12,12 @@ export type NavRoute =
   | 'inventory'
   | 'reports';
 
+export interface RouteParams {
+  tableId?: string;
+  orderId?: string;
+  [key: string]: string | undefined;
+}
+
 export interface ToastMessage {
   id: string;
   type: 'success' | 'error' | 'warning' | 'info';
@@ -22,6 +28,7 @@ export interface ToastMessage {
 
 interface UIState {
   currentRoute: NavRoute;
+  routeParams: RouteParams;
   isSidebarCollapsed: boolean;
   
   // Modals
@@ -39,7 +46,8 @@ interface UIState {
   toasts: ToastMessage[];
 
   // Actions
-  setCurrentRoute: (route: NavRoute) => void;
+  setCurrentRoute: (route: NavRoute, params?: RouteParams) => void;
+  navigateTo: (route: NavRoute, params?: RouteParams) => void;
   toggleSidebar: () => void;
   openSetupWizard: () => void;
   closeSetupWizard: () => void;
@@ -55,8 +63,33 @@ interface UIState {
   removeToast: (id: string) => void;
 }
 
+function parseHash(): { route: NavRoute; params: RouteParams } {
+  try {
+    const hash = window.location.hash.replace(/^#/, '');
+    if (!hash) return { route: 'dashboard', params: {} };
+    const [rawRoute, rawQuery] = hash.split('?');
+    const validRoutes: NavRoute[] = [
+      'dashboard', 'pos', 'orders', 'menu', 'tables', 'settings', 'customers', 'inventory', 'reports'
+    ];
+    const route = validRoutes.includes(rawRoute as NavRoute) ? (rawRoute as NavRoute) : 'dashboard';
+    const params: RouteParams = {};
+    if (rawQuery) {
+      const sp = new URLSearchParams(rawQuery);
+      sp.forEach((val, key) => {
+        params[key] = val;
+      });
+    }
+    return { route, params };
+  } catch {
+    return { route: 'dashboard', params: {} };
+  }
+}
+
+const initial = typeof window !== 'undefined' ? parseHash() : { route: 'dashboard' as NavRoute, params: {} };
+
 export const useUIStore = create<UIState>((set) => ({
-  currentRoute: 'dashboard',
+  currentRoute: initial.route,
+  routeParams: initial.params,
   isSidebarCollapsed: false,
   isSetupWizardOpen: false,
   isVariantModalOpen: false,
@@ -69,7 +102,22 @@ export const useUIStore = create<UIState>((set) => ({
   receiptModalData: null,
   toasts: [],
 
-  setCurrentRoute: (route) => set({ currentRoute: route }),
+  setCurrentRoute: (route, params = {}) => {
+    if (typeof window !== 'undefined') {
+      const qs = new URLSearchParams(params as Record<string, string>).toString();
+      window.location.hash = qs ? `${route}?${qs}` : route;
+    }
+    set({ currentRoute: route, routeParams: params });
+  },
+
+  navigateTo: (route, params = {}) => {
+    if (typeof window !== 'undefined') {
+      const qs = new URLSearchParams(params as Record<string, string>).toString();
+      window.location.hash = qs ? `${route}?${qs}` : route;
+    }
+    set({ currentRoute: route, routeParams: params });
+  },
+
   toggleSidebar: () => set((s) => ({ isSidebarCollapsed: !s.isSidebarCollapsed })),
   openSetupWizard: () => set({ isSetupWizardOpen: true }),
   closeSetupWizard: () => set({ isSetupWizardOpen: false }),
@@ -106,3 +154,11 @@ export const useUIStore = create<UIState>((set) => ({
   removeToast: (id) =>
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 }));
+
+// Listen to hash changes for browser back/forward or manual hash updates
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', () => {
+    const { route, params } = parseHash();
+    useUIStore.setState({ currentRoute: route, routeParams: params });
+  });
+}

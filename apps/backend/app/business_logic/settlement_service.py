@@ -35,6 +35,9 @@ def get_or_create_invoice(
         discount_type=dt,
         discount_value=dv,
         tax_rate_percent=order.tax_rate_percent,
+        tax_type=order.tax_type,
+        is_tax_inclusive=order.is_tax_inclusive,
+        is_tax_enabled=order.tax_rate_percent > 0,
     )
 
     invoice = Invoice(
@@ -42,8 +45,13 @@ def get_or_create_invoice(
         invoice_number=invoice_number,
         subtotal_paise=financials["subtotal_paise"],
         discount_paise=financials["discount_paise"],
+        taxable_amount_paise=financials["taxable_amount_paise"],
+        tax_rate_percent=order.tax_rate_percent,
+        tax_type=order.tax_type,
+        is_tax_inclusive=order.is_tax_inclusive,
         cgst_paise=financials["cgst_paise"],
         sgst_paise=financials["sgst_paise"],
+        igst_paise=financials.get("igst_paise", 0),
         total_tax_paise=financials["tax_paise"],
         grand_total_paise=financials["grand_total_paise"],
         rounded_paise=0,

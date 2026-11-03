@@ -21,6 +21,9 @@ export const SetupWizard: React.FC = () => {
   const [address, setAddress] = useState('Plot 42, Commercial Complex, MG Road, New Delhi');
   const [gstRegistered, setGstRegistered] = useState(true);
   const [gstin, setGstin] = useState('07AAAAA0000A1Z5');
+  const [isTaxEnabled, setIsTaxEnabled] = useState(true);
+  const [isTaxInclusive, setIsTaxInclusive] = useState(false);
+  const [taxType, setTaxType] = useState('CGST_SGST');
   const [taxRatePercent, setTaxRatePercent] = useState<number>(5.0);
   const [paperWidthMm, setPaperWidthMm] = useState<number>(80);
   const [seedSampleMenu, setSeedSampleMenu] = useState(true);
@@ -48,8 +51,10 @@ export const SetupWizard: React.FC = () => {
         language: 'en',
         gst_registered: gstRegistered,
         gstin: gstRegistered ? gstin.trim() : null,
+        is_tax_enabled: isTaxEnabled,
+        is_tax_inclusive: isTaxInclusive,
         tax_rate_percent: Number(taxRatePercent),
-        tax_type: 'CGST_SGST',
+        tax_type: taxType,
         paper_width_mm: Number(paperWidthMm),
         seed_sample_menu: seedSampleMenu,
       });
@@ -186,13 +191,17 @@ export const SetupWizard: React.FC = () => {
                 <label className="text-xs font-semibold text-[#202124]">GST Rate (%)</label>
                 <select
                   value={taxRatePercent}
-                  onChange={(e) => setTaxRatePercent(parseFloat(e.target.value))}
+                  onChange={(e) => {
+                    const r = parseFloat(e.target.value);
+                    setTaxRatePercent(r);
+                    setIsTaxEnabled(r > 0);
+                  }}
                   className="h-10 rounded-btn border border-[#E8EAF0] bg-white px-3 text-sm text-[#202124] focus:border-[#F07818] focus:outline-none"
                 >
                   <option value={5.0}>5.0% (Standard Restaurant GST: 2.5% CGST + 2.5% SGST)</option>
-                  <option value={12.0}>12.0% (AC Dining / Premium)</option>
+                  <option value={12.0}>12.0% (AC Dining / Premium Tier)</option>
                   <option value={18.0}>18.0% (Hotel / Banquet)</option>
-                  <option value={0.0}>0.0% (Non-GST Composition)</option>
+                  <option value={0.0}>0.0% (Non-GST / Exempt)</option>
                 </select>
               </div>
 
@@ -206,6 +215,40 @@ export const SetupWizard: React.FC = () => {
                   <option value={80}>80mm (Standard Desktop Receipt Printer)</option>
                   <option value={58}>58mm (Compact 2-inch Thermal Printer)</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#E8EAF0] p-3 bg-[#FAFAFB] space-y-2">
+              <label className="text-xs font-semibold text-[#202124] block">Menu Pricing Mode</label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsTaxInclusive(false)}
+                  className={`p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${
+                    !isTaxInclusive
+                      ? 'border-[#F07818] bg-[#FFF0E3]/50 font-bold text-[#202124]'
+                      : 'border-[#E8EAF0] bg-white text-[#6B7280]'
+                  }`}
+                >
+                  Tax Exclusive (Standard)
+                  <p className="text-[10px] font-normal text-[#6B7280]">
+                    Tax added on top at checkout
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsTaxInclusive(true)}
+                  className={`p-2.5 rounded-lg border text-left cursor-pointer transition-colors ${
+                    isTaxInclusive
+                      ? 'border-[#F07818] bg-[#FFF0E3]/50 font-bold text-[#202124]'
+                      : 'border-[#E8EAF0] bg-white text-[#6B7280]'
+                  }`}
+                >
+                  Tax Inclusive (MRP)
+                  <p className="text-[10px] font-normal text-[#6B7280]">
+                    Menu prices already include GST
+                  </p>
+                </button>
               </div>
             </div>
 

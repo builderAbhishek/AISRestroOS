@@ -36,6 +36,9 @@ export const SettingsView: React.FC = () => {
   const [gstRegistered, setGstRegistered] = useState(false);
   const [gstin, setGstin] = useState('');
 
+  const [isTaxEnabled, setIsTaxEnabled] = useState<boolean>(true);
+  const [isTaxInclusive, setIsTaxInclusive] = useState<boolean>(false);
+  const [taxType, setTaxType] = useState<string>('CGST_SGST');
   const [taxRate, setTaxRate] = useState<number>(5.0);
   const [paperWidth, setPaperWidth] = useState<number>(80);
   const [invoicePrefix, setInvoicePrefix] = useState('INV-');
@@ -55,7 +58,10 @@ export const SettingsView: React.FC = () => {
       setGstin(restaurant.gstin || '');
 
       if (restaurant.settings) {
-        setTaxRate(restaurant.settings.tax_rate_percent);
+        setIsTaxEnabled(restaurant.settings.is_tax_enabled ?? true);
+        setIsTaxInclusive(restaurant.settings.is_tax_inclusive ?? false);
+        setTaxType(restaurant.settings.tax_type || 'CGST_SGST');
+        setTaxRate(restaurant.settings.tax_rate_percent ?? 5.0);
         setPaperWidth(restaurant.settings.paper_width_mm);
         setInvoicePrefix(restaurant.settings.invoice_prefix);
         setKotPrefix(restaurant.settings.kot_prefix);
@@ -83,6 +89,9 @@ export const SettingsView: React.FC = () => {
       });
 
       await restaurantApi.updateSettings({
+        is_tax_enabled: isTaxEnabled,
+        is_tax_inclusive: isTaxInclusive,
+        tax_type: taxType,
         tax_rate_percent: Number(taxRate),
         paper_width_mm: Number(paperWidth),
         invoice_prefix: invoicePrefix.trim(),
@@ -238,22 +247,128 @@ export const SettingsView: React.FC = () => {
               <CardTitle>Taxation & Thermal Printer Preferences</CardTitle>
             </div>
           </CardHeader>
-          <CardContent className="pt-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[#202124]">Default GST Rate (%)</label>
-                <select
-                  value={taxRate}
-                  onChange={(e) => setTaxRate(parseFloat(e.target.value))}
-                  className="h-10 rounded-btn border border-[#E8EAF0] bg-white px-3 text-xs font-semibold text-[#202124]"
-                >
-                  <option value={5.0}>5.0% (2.5% CGST + 2.5% SGST)</option>
-                  <option value={12.0}>12.0% (6% CGST + 6% SGST)</option>
-                  <option value={18.0}>18.0% (9% CGST + 9% SGST)</option>
-                  <option value={0.0}>0.0% (Non-GST / Exempt)</option>
-                </select>
+          <CardContent className="pt-4 space-y-5">
+            {/* Tax Enable Toggle */}
+            <div className="rounded-xl border border-[#E8EAF0] p-4 bg-[#FAFAFB] space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-[#202124]">Calculate & Charge Tax on Orders</span>
+                  <p className="text-[11px] text-[#6B7280]">
+                    Enable GST or Non-GST tax calculation on all bills and POS receipts
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsTaxEnabled(true)}
+                    className={`px-3 py-1 text-xs rounded-md font-semibold cursor-pointer transition-colors ${
+                      isTaxEnabled
+                        ? 'bg-[#16865B] text-white shadow-xs'
+                        : 'bg-white border border-[#E8EAF0] text-[#6B7280]'
+                    }`}
+                  >
+                    Tax Enabled
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsTaxEnabled(false)}
+                    className={`px-3 py-1 text-xs rounded-md font-semibold cursor-pointer transition-colors ${
+                      !isTaxEnabled
+                        ? 'bg-[#6B7280] text-white shadow-xs'
+                        : 'bg-white border border-[#E8EAF0] text-[#6B7280]'
+                    }`}
+                  >
+                    Tax Disabled (0%)
+                  </button>
+                </div>
               </div>
 
+              {isTaxEnabled && (
+                <div className="pt-3 border-t border-[#E8EAF0] space-y-4">
+                  {/* Tax Inclusive vs Exclusive */}
+                  <div>
+                    <label className="text-xs font-semibold text-[#202124] block mb-1.5">
+                      Pricing Mode (Tax Handling)
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsTaxInclusive(false)}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition-colors ${
+                          !isTaxInclusive
+                            ? 'border-[#F07818] bg-[#FFF0E3]/40'
+                            : 'border-[#E8EAF0] bg-white hover:bg-[#FAFAFB]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#202124]">Tax Exclusive (Standard)</span>
+                          {!isTaxInclusive && (
+                            <span className="h-2 w-2 rounded-full bg-[#F07818]" />
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#6B7280] mt-1">
+                          Base price + Tax added at checkout (e.g. ₹200 item + 5% GST = ₹210 total)
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsTaxInclusive(true)}
+                        className={`p-3 rounded-xl border text-left cursor-pointer transition-colors ${
+                          isTaxInclusive
+                            ? 'border-[#F07818] bg-[#FFF0E3]/40'
+                            : 'border-[#E8EAF0] bg-white hover:bg-[#FAFAFB]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#202124]">Tax Inclusive (MRP Style)</span>
+                          {isTaxInclusive && (
+                            <span className="h-2 w-2 rounded-full bg-[#F07818]" />
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[#6B7280] mt-1">
+                          Menu price includes tax (e.g. ₹210 item includes ₹10 GST, customer pays ₹210)
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tax Type & Tax Rate */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-[#202124]">Tax Structure / Regime</label>
+                      <select
+                        value={taxType}
+                        onChange={(e) => setTaxType(e.target.value)}
+                        className="h-10 rounded-btn border border-[#E8EAF0] bg-white px-3 text-xs font-semibold text-[#202124]"
+                      >
+                        <option value="CGST_SGST">Intra-State GST (CGST + SGST split equally)</option>
+                        <option value="IGST">Inter-State GST (IGST single rate)</option>
+                        <option value="NON_GST">Non-GST / Local VAT</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs font-semibold text-[#202124]">Default Tax Rate (%)</label>
+                      <select
+                        value={taxRate}
+                        onChange={(e) => setTaxRate(parseFloat(e.target.value))}
+                        className="h-10 rounded-btn border border-[#E8EAF0] bg-white px-3 text-xs font-semibold text-[#202124]"
+                      >
+                        <option value={5.0}>5.0% (Standard Food & Beverage GST: 2.5% CGST + 2.5% SGST)</option>
+                        <option value={12.0}>12.0% (AC Dining / Premium Tier: 6% + 6%)</option>
+                        <option value={18.0}>18.0% (Hotel Restaurant / Banquet: 9% + 9%)</option>
+                        <option value={28.0}>28.0% (Special Aerated Beverages: 14% + 14%)</option>
+                        <option value={0.0}>0.0% (Exempt)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Thermal Printing Settings */}
+            <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-[#202124]">Thermal Roll Width</label>
                 <select
@@ -264,6 +379,16 @@ export const SettingsView: React.FC = () => {
                   <option value={80}>80mm (Desktop Thermal Printer, ~42 chars)</option>
                   <option value={58}>58mm (Handheld / Compact, ~32 chars)</option>
                 </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-[#202124]">Receipt Footer Message</label>
+                <input
+                  value={billFooter}
+                  onChange={(e) => setBillFooter(e.target.value)}
+                  placeholder="Thank you for dining with us! Please visit again."
+                  className="h-10 rounded-btn border border-[#E8EAF0] bg-white px-3 text-xs text-[#202124]"
+                />
               </div>
             </div>
 
@@ -281,13 +406,6 @@ export const SettingsView: React.FC = () => {
                 placeholder="KOT-"
               />
             </div>
-
-            <Input
-              label="Receipt Footer Thank You Message"
-              value={billFooter}
-              onChange={(e) => setBillFooter(e.target.value)}
-              placeholder="Thank you for dining with us! Please visit again."
-            />
           </CardContent>
         </Card>
 

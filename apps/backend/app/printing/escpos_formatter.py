@@ -117,14 +117,24 @@ def format_customer_invoice(
         lines.append(f"Discount:".ljust(24) + disc_str.rjust(width - 24))
 
     # Taxes
-    if invoice.cgst_paise > 0 or invoice.sgst_paise > 0:
+    rate = getattr(invoice, 'tax_rate_percent', None)
+    if rate is None:
+        rate = getattr(order, 'tax_rate_percent', 0.0)
+
+    is_inclusive = getattr(invoice, 'is_tax_inclusive', False)
+    tax_label_suffix = " (Incl.)" if is_inclusive else ""
+
+    if (getattr(invoice, 'cgst_paise', 0) > 0 or getattr(invoice, 'sgst_paise', 0) > 0) and rate > 0:
         cgst_str = f"INR {(invoice.cgst_paise / 100):.2f}"
         sgst_str = f"INR {(invoice.sgst_paise / 100):.2f}"
-        lines.append(f"CGST ({order.tax_rate_percent / 2:.1f}%):".ljust(24) + cgst_str.rjust(width - 24))
-        lines.append(f"SGST ({order.tax_rate_percent / 2:.1f}%):".ljust(24) + sgst_str.rjust(width - 24))
-    elif invoice.total_tax_paise > 0:
+        lines.append(f"CGST ({rate / 2:.1f}%){tax_label_suffix}:".ljust(24) + cgst_str.rjust(width - 24))
+        lines.append(f"SGST ({rate / 2:.1f}%){tax_label_suffix}:".ljust(24) + sgst_str.rjust(width - 24))
+    elif getattr(invoice, 'igst_paise', 0) > 0 and rate > 0:
+        igst_str = f"INR {(invoice.igst_paise / 100):.2f}"
+        lines.append(f"IGST ({rate:.1f}%){tax_label_suffix}:".ljust(24) + igst_str.rjust(width - 24))
+    elif invoice.total_tax_paise > 0 and rate > 0:
         tax_str = f"INR {(invoice.total_tax_paise / 100):.2f}"
-        lines.append(f"Tax ({order.tax_rate_percent:.1f}%):".ljust(24) + tax_str.rjust(width - 24))
+        lines.append(f"Tax ({rate:.1f}%){tax_label_suffix}:".ljust(24) + tax_str.rjust(width - 24))
 
     lines.append(divider)
     grand_total_str = f"INR {(invoice.grand_total_paise / 100):.2f}"

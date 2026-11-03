@@ -1,5 +1,10 @@
-from typing import Optional, List, Tuple
-from app.schemas.order import OrderItemInput
+from typing import Optional, List, Tuple, Dict, Any
+from app.business_logic.tax_service import (
+    calculate_discount_paise,
+    calculate_tax_breakdown,
+    compute_order_financials,
+    TaxCalculationResult,
+)
 
 
 def calculate_item_price_paise(
@@ -12,69 +17,45 @@ def calculate_item_price_paise(
     return max(0, unit_price)
 
 
-def calculate_discount_paise(
-    subtotal_paise: int,
-    discount_type: Optional[str],
-    discount_value: float,
-) -> int:
-    if not discount_type or discount_value <= 0 or subtotal_paise <= 0:
-        return 0
-
-    if discount_type == "percentage":
-        # e.g., 10% discount
-        discount = int(round((subtotal_paise * discount_value) / 100.0))
-    elif discount_type == "amount":
-        # discount_value is in INR, convert to paise
-        discount = int(round(discount_value * 100.0))
-    else:
-        discount = 0
-
-    return min(subtotal_paise, max(0, discount))
-
-
 def calculate_taxes_paise(
     taxable_amount_paise: int,
     tax_rate_percent: float,
     tax_type: str = "CGST_SGST",
+    is_tax_inclusive: bool = False,
+    is_tax_enabled: bool = True,
 ) -> Tuple[int, int, int]:
     """
-    Returns (cgst_paise, sgst_paise, total_tax_paise)
-    For 5% GST in India, CGST = 2.5%, SGST = 2.5%
+    Returns (cgst_paise, sgst_paise, total_tax_paise).
     """
-    if taxable_amount_paise <= 0 or tax_rate_percent <= 0:
-        return 0, 0, 0
-
-    if tax_type == "CGST_SGST":
-        half_rate = tax_rate_percent / 2.0
-        cgst = int(round((taxable_amount_paise * half_rate) / 100.0))
-        sgst = int(round((taxable_amount_paise * half_rate) / 100.0))
-        return cgst, sgst, (cgst + sgst)
-    else:
-        total_tax = int(round((taxable_amount_paise * tax_rate_percent) / 100.0))
-        return 0, 0, total_tax
+    breakdown = calculate_tax_breakdown(
+        net_amount_paise=taxable_amount_paise,
+        tax_rate_percent=tax_rate_percent,
+        tax_type=tax_type,
+        is_tax_inclusive=is_tax_inclusive,
+        is_tax_enabled=is_tax_enabled,
+    )
+    return breakdown["cgst_paise"], breakdown["sgst_paise"], breakdown["tax_paise"]
 
 
 def calculate_order_financials(
     items_line_totals: List[int],
-    discount_type: Optional[str],
-    discount_value: float,
-    tax_rate_percent: float,
+    discount_type: Optional[str] = None,
+    discount_value: float = 0.0,
+    tax_rate_percent: float = 0.0,
     tax_type: str = "CGST_SGST",
-) -> dict:
-    subtotal_paise = sum(items_line_totals)
-    discount_paise = calculate_discount_paise(subtotal_paise, discount_type, discount_value)
-    taxable_amount = max(0, subtotal_paise - discount_paise)
-    cgst_paise, sgst_paise, tax_paise = calculate_taxes_paise(
-        taxable_amount, tax_rate_percent, tax_type
+    is_tax_inclusive: bool = False,
+    is_tax_enabled: bool = True,
+) -> Dict[str, Any]:
+    """
+    Unified order financial calculation returning integer paise totals.
+    """
+    result = compute_order_financials(
+        items_line_totals=items_line_totals,
+        discount_type=discount_type,
+        discount_value=discount_value,
+        tax_rate_percent=tax_rate_percent,
+        tax_type=tax_type,
+        is_tax_inclusive=is_tax_inclusive,
+        is_tax_enabled=is_tax_enabled,
     )
-    grand_total_paise = taxable_amount + tax_paise
-
-    return {
-        "subtotal_paise": subtotal_paise,
-        "discount_paise": discount_paise,
-        "taxable_amount_paise": taxable_amount,
-        "cgst_paise": cgst_paise,
-        "sgst_paise": sgst_paise,
-        "tax_paise": tax_paise,
-        "grand_total_paise": grand_total_paise,
-    }
+    return result.to_dict()

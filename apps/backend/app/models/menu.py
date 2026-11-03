@@ -1,5 +1,5 @@
 from typing import Optional, List
-from sqlalchemy import String, Boolean, Text, ForeignKey, Integer, Table, Column
+from sqlalchemy import String, Boolean, Text, ForeignKey, Integer, Float, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import TimestampedUUIDModel, Base
 
@@ -21,6 +21,7 @@ class MenuCategory(TimestampedUUIDModel):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     restaurant: Mapped["Restaurant"] = relationship("Restaurant", back_populates="categories")
     items: Mapped[List["MenuItem"]] = relationship(
@@ -43,10 +44,17 @@ class MenuItem(TimestampedUUIDModel):
     # Price stored in integer paise (e.g. ₹150.00 = 15000 paise)
     base_price_paise: Mapped[int] = mapped_column(Integer, nullable=False)
     is_veg: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    item_type: Mapped[str] = mapped_column(String(20), default="veg", nullable=False)  # veg | non_veg | egg
     is_available: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_recommended: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_bestseller: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_tax_inclusive: Mapped[Optional[bool]] = mapped_column(Boolean, default=None, nullable=True)
+    tax_rate_override_percent: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    preparation_time_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     has_variants: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     image_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     category: Mapped["MenuCategory"] = relationship("MenuCategory", back_populates="items")
     variants: Mapped[List["MenuVariant"]] = relationship(

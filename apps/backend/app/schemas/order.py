@@ -93,8 +93,12 @@ class OrderResponse(BaseModel):
     discount_value: float
     discount_paise: int
     tax_rate_percent: float
+    tax_type: str = "CGST_SGST"
+    is_tax_inclusive: bool = False
+    taxable_amount_paise: int = 0
     cgst_paise: int
     sgst_paise: int
+    igst_paise: int = 0
     tax_paise: int
     total_paise: int
     notes: Optional[str]
@@ -111,12 +115,20 @@ class OrderResponse(BaseModel):
         return self.discount_paise / 100.0
 
     @computed_field
+    def taxable_amount_inr(self) -> float:
+        return self.taxable_amount_paise / 100.0
+
+    @computed_field
     def cgst_inr(self) -> float:
         return self.cgst_paise / 100.0
 
     @computed_field
     def sgst_inr(self) -> float:
         return self.sgst_paise / 100.0
+
+    @computed_field
+    def igst_inr(self) -> float:
+        return self.igst_paise / 100.0
 
     @computed_field
     def tax_inr(self) -> float:
